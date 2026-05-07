@@ -1,5 +1,8 @@
 #include <Arduino.h>
-#include <NimBLEDevice.h>
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEClient.h>
 #include <TFT_eSPI.h>
 #include <SPI.h>
 
@@ -9,6 +12,7 @@
 // 显示屏: 2.8寸 ST7789P3 (240x320)
 // BMS MAC: 98:DA:20:07:B9:00
 // BMS名称: JK_BD4A24S10P
+// 使用 ESP32 原生 BLE 库 (无需 NimBLE)
 // ============================================================
 
 // ----- 调试开关 -----
@@ -24,25 +28,25 @@
 #endif
 
 // ----- BMS配置 -----
-#define BMS_MAC_ADDRESS "98:DA:20:07:B9:00"
+#define BMS_MAC_ADDRESS "98:da:20:07:b9:00"
 #define BMS_NAME "JK_BD4A24S10P"
 
 // ----- BLE服务UUID -----
-#define SERVICE_UUID "ffe0"
-#define CHAR_UUID "ffe1"
+static BLEUUID serviceUUID("ffe0");
+static BLEUUID charUUID("ffe1");
 
 // ----- 显示屏配置 -----
 TFT_eSPI tft = TFT_eSPI();
 
 // ----- 颜色定义 (电竞风黑底高对比度) -----
-#define COLOR_BG        0x0000   // 纯黑背景
-#define COLOR_PRIMARY   0x07E0   // 霓虹绿 #00FF41
-#define COLOR_SECONDARY 0x001F   // 电光蓝 #00BFFF
-#define COLOR_ACCENT    0xF800   // 警示红 #FF0040
-#define COLOR_WARNING   0xFFE0   // 琥珀黄 #FFC800
-#define COLOR_TEXT      0xFFFF   // 纯白
-#define COLOR_DIM       0x4208   // 暗灰 #444444
-#define COLOR_GRID      0x1082   // 网格蓝灰
+#define COLOR_BG        0x0000
+#define COLOR_PRIMARY   0x07E0
+#define COLOR_SECONDARY 0x001F
+#define COLOR_ACCENT    0xF800
+#define COLOR_WARNING   0xFFE0
+#define COLOR_TEXT      0xFFFF
+#define COLOR_DIM       0x4208
+#define COLOR_GRID      0x1082
 
 // ----- 屏幕尺寸 -----
 #define SCREEN_WIDTH  240
@@ -61,56 +65,44 @@ TFT_eSPI tft = TFT_eSPI();
 struct BMSData {
   bool valid = false;
   bool connected = false;
-
-  // 核心数据
-  float batteryVoltage = 0;      // 电池电压 V
-  float chargeCurrent = 0;       // 充电电流 A (负值为放电)
-  float batteryPower = 0;        // 电池功率 W
-  int soc = 0;                   // 电量百分比 %
-  float capacityRemain = 0;      // 剩余容量 Ah
-  float nominalCapacity = 0;     // 标称容量 Ah
-
-  // 温度
-  float tempT1 = 0;              // 温度传感器1
-  float tempT2 = 0;              // 温度传感器2
-  float tempMOS = 0;             // MOS管温度
-
-  // 单体电芯
-  float cellVoltage[24] = {0};   // 最多24串
+  float batteryVoltage = 0;
+  float chargeCurrent = 0;
+  float batteryPower = 0;
+  int soc = 0;
+  float capacityRemain = 0;
+  float nominalCapacity = 0;
+  float tempT1 = 0;
+  float tempT2 = 0;
+  float tempMOS = 0;
+  float cellVoltage[24] = {0};
   int cellCount = 0;
   float avgCellVoltage = 0;
   float deltaCellVoltage = 0;
-
-  // 状态
   bool charging = false;
   bool discharging = false;
   bool balancing = false;
-
-  // 循环
   float cycleCount = 0;
   float cycleCapacity = 0;
-
   unsigned long lastUpdate = 0;
 };
 
 BMSData bmsData;
 
 // ============================================================
-// JKBMS BLE 类
+// JKBMS BLE 类 (使用 ESP32 原生 BLE)
 // ============================================================
-class JKBMS_BLE {
+class JKBMS_BLE : public BLEClientCallbacks, public BLEAdvertisedDeviceCallbacks {
 public:
   JKBMS_BLE(const char* mac) : targetMAC(mac) {}
 
   bool begin() {
-    NimBLEDevice::init("");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-    pScan = NimBLEDevice::getScan();
-    pScan->setScanCallbacks(&scanCallbacks, false);
+    BLEDevice::init("");
+    BLEScan* pScan = BLEDevice::getScan();
+    pScan->setAdvertisedDeviceCallbacks(this);
     pScan->setInterval(100);
     pScan->setWindow(99);
     pScan->setActiveScan(true);
-    pScan->start(5, nullptr, false);
+    pScan->start(5, false);
     DEBUG_PRINTLN("BLE扫描已启动...");
     return true;
   }
@@ -118,7 +110,8 @@ public:
   void loop() {
     if (!connected && !doConnect) {
       if (millis() - lastScanTime > 10000) {
-        pScan->start(5, nullptr, false);
+        BLEScan* pScan = BLEDevice::getScan();
+        pScan->start(5, false);
         lastScanTime = millis();
       }
     }
@@ -148,13 +141,40 @@ public:
 
   bool isConnected() { return connected; }
 
+  // BLEAdvertisedDeviceCallbacks
+  void onResult(BLEAdvertisedDevice advertisedDevice) override {
+    std::string addr = advertisedDevice.getAddress().toString();
+    if (addr == targetMAC) {
+      DEBUG_PRINTF("找到BMS: %s\n", addr.c_str());
+      advDevice = new BLEAdvertisedDevice(advertisedDevice);
+      doConnect = true;
+      BLEDevice::getScan()->stop();
+    }
+  }
+
+  // BLEClientCallbacks
+  void onConnect(BLEClient* pClient) override {
+    DEBUG_PRINTLN("BLE已连接");
+  }
+
+  void onDisconnect(BLEClient* pClient) override {
+    DEBUG_PRINTLN("BLE已断开");
+    connected = false;
+    doConnect = false;
+    bmsData.connected = false;
+  }
+
+  void notifyCallback(BLERemoteCharacteristic* pChr, uint8_t* pData, size_t length, bool isNotify) {
+    handleNotification(pData, length);
+  }
+
 private:
   const char* targetMAC;
-  NimBLERemoteCharacteristic* pChr = nullptr;
-  const NimBLEAdvertisedDevice* advDevice = nullptr;
+  BLERemoteCharacteristic* pChr = nullptr;
+  BLEAdvertisedDevice* advDevice = nullptr;
+  BLEClient* pClient = nullptr;
   bool doConnect = false;
   bool connected = false;
-  NimBLEScan* pScan;
   unsigned long lastScanTime = 0;
   unsigned long lastPollTime = 0;
   unsigned long lastNotifyTime = 0;
@@ -163,39 +183,33 @@ private:
   int rxIndex = 0;
   bool rxActive = false;
 
-  static void notifyCallback(NimBLERemoteCharacteristic* pChr, uint8_t* pData, size_t length, bool isNotify);
-
-  class ScanCallbacks : public NimBLEScanCallbacks {
-  public:
-    void onResult(const NimBLEAdvertisedDevice* advertisedDevice);
-  } scanCallbacks;
-
   bool connectToServer() {
     DEBUG_PRINTF("连接BMS: %s\n", targetMAC);
-    NimBLEClient* pClient = NimBLEDevice::createClient();
-    pClient->setConnectionParams(12, 12, 0, 150);
-    pClient->setConnectTimeout(5000);
+    pClient = BLEDevice::createClient();
+    pClient->setClientCallbacks(this);
 
     if (!pClient->connect(advDevice)) {
       DEBUG_PRINTLN("连接失败");
       return false;
     }
 
-    NimBLERemoteService* pSvc = pClient->getService(SERVICE_UUID);
+    BLERemoteService* pSvc = pClient->getService(serviceUUID);
     if (!pSvc) {
       DEBUG_PRINTLN("服务未找到");
       pClient->disconnect();
       return false;
     }
 
-    pChr = pSvc->getCharacteristic(CHAR_UUID);
+    pChr = pSvc->getCharacteristic(charUUID);
     if (!pChr || !pChr->canNotify()) {
       DEBUG_PRINTLN("特征值未找到");
       pClient->disconnect();
       return false;
     }
 
-    if (!pChr->subscribe(true, notifyCallback)) {
+    if (!pChr->subscribe(true, [this](BLERemoteCharacteristic* pChr, uint8_t* pData, size_t length, bool isNotify) {
+      this->notifyCallback(pChr, pData, length, isNotify);
+    })) {
       DEBUG_PRINTLN("订阅失败");
       pClient->disconnect();
       return false;
@@ -229,7 +243,7 @@ private:
     frame[19] = crc;
 
     if (pChr) {
-      pChr->writeValue(frame, 20);
+      pChr->writeValue(frame, 20, false);
     }
   }
 
@@ -241,10 +255,9 @@ private:
         if (i + 3 < length && pData[i+1] == 0xAA && pData[i+2] == 0xEB && pData[i+3] == 0x90) {
           rxActive = true;
           rxIndex = 0;
-          for (int j = 0; j < 4 && i < length; j++, i++) {
-            rxBuffer[rxIndex++] = pData[i];
+          for (int j = 0; j < 4 && (size_t)(i + j) < length; j++) {
+            rxBuffer[rxIndex++] = pData[i + j];
           }
-          i--;
         }
       } else if (rxActive) {
         rxBuffer[rxIndex++] = pData[i];
@@ -259,7 +272,6 @@ private:
 
   void parseFrame() {
     uint8_t frameType = rxBuffer[4];
-
     switch (frameType) {
       case 0x02: parseCellInfo(); break;
       case 0x03: parseDeviceInfo(); break;
@@ -268,7 +280,6 @@ private:
   }
 
   void parseCellInfo() {
-    // 单体电压 (6-69字节, 最多32串, 每串2字节, 单位0.001V)
     bmsData.cellCount = 0;
     float sum = 0;
     float maxV = 0, minV = 999;
@@ -291,54 +302,35 @@ private:
       bmsData.deltaCellVoltage = maxV - minV;
     }
 
-    // 电池电压 (118-121字节, uint32, 0.001V)
     bmsData.batteryVoltage = (rxBuffer[118] | (rxBuffer[119] << 8) |
                               (rxBuffer[120] << 16) | (rxBuffer[121] << 24)) * 0.001;
 
-    // 电池功率 (122-125字节, uint32, 0.001W)
     bmsData.batteryPower = (rxBuffer[122] | (rxBuffer[123] << 8) |
                             (rxBuffer[124] << 16) | (rxBuffer[125] << 24)) * 0.001;
 
-    // 充电电流 (126-129字节, int32, 0.001A) 正值充电，负值放电
     int32_t currentRaw = rxBuffer[126] | (rxBuffer[127] << 8) |
                          (rxBuffer[128] << 16) | (rxBuffer[129] << 24);
     bmsData.chargeCurrent = currentRaw * 0.001;
 
-    // MOS温度 (112-113字节, int16, 0.1C)
     bmsData.tempMOS = (int16_t)(rxBuffer[112] | (rxBuffer[113] << 8)) * 0.1;
-
-    // 温度传感器1 (130-131字节, int16, 0.1C)
     bmsData.tempT1 = (int16_t)(rxBuffer[130] | (rxBuffer[131] << 8)) * 0.1;
-
-    // 温度传感器2 (132-133字节, int16, 0.1C)
     bmsData.tempT2 = (int16_t)(rxBuffer[132] | (rxBuffer[133] << 8)) * 0.1;
 
-    // 错误码 (134-135字节)
-    uint16_t errors = rxBuffer[134] | (rxBuffer[135] << 8);
-
-    // 均衡电流 (138-139字节, int16, 0.001A)
     bmsData.balancing = (rxBuffer[140] != 0);
-
-    // SOC (141字节)
     bmsData.soc = rxBuffer[141];
 
-    // 剩余容量 (142-145字节, uint32, 0.001Ah)
     bmsData.capacityRemain = (rxBuffer[142] | (rxBuffer[143] << 8) |
                               (rxBuffer[144] << 16) | (rxBuffer[145] << 24)) * 0.001;
 
-    // 标称容量 (146-149字节, uint32, 0.001Ah)
     bmsData.nominalCapacity = (rxBuffer[146] | (rxBuffer[147] << 8) |
                                (rxBuffer[148] << 16) | (rxBuffer[149] << 24)) * 0.001;
 
-    // 循环次数 (150-153字节)
     bmsData.cycleCount = rxBuffer[150] | (rxBuffer[151] << 8) |
                          (rxBuffer[152] << 16) | (rxBuffer[153] << 24);
 
-    // 循环容量 (154-157字节, uint32, 0.001Ah)
     bmsData.cycleCapacity = (rxBuffer[154] | (rxBuffer[155] << 8) |
                              (rxBuffer[156] << 16) | (rxBuffer[157] << 24)) * 0.001;
 
-    // 充放电状态
     bmsData.charging = (bmsData.chargeCurrent > 0.1);
     bmsData.discharging = (bmsData.chargeCurrent < -0.1);
     bmsData.valid = true;
@@ -350,7 +342,6 @@ private:
   }
 
   void parseDeviceInfo() {
-    // 设备信息帧解析 (如需要可扩展)
     DEBUG_PRINTLN("收到设备信息帧");
   }
 };
@@ -363,7 +354,6 @@ JKBMS_BLE jkbms(BMS_MAC_ADDRESS);
 class DashboardUI {
 public:
   void begin() {
-    // 配置背光引脚 (IO21，高电平点亮)
     pinMode(BACKLIGHT_PIN, OUTPUT);
     digitalWrite(BACKLIGHT_PIN, HIGH);
 
@@ -371,8 +361,6 @@ public:
     tft.setRotation(0);
     tft.fillScreen(COLOR_BG);
     tft.setTextDatum(MC_DATUM);
-
-    // 绘制静态框架
     drawFrame();
   }
 
@@ -381,48 +369,32 @@ public:
       drawConnecting();
       return;
     }
-
-    // 功率 (主视觉 - 顶部大字)
     drawPower();
-
-    // 容量信息 (中部)
     drawCapacity();
-
-    // 电压电流 (中下部)
     drawVoltageCurrent();
-
-    // 温度 (底部)
     drawTemperature();
-
-    // 状态指示器
     drawStatus();
   }
 
 private:
-  unsigned long lastUpdate = 0;
   float lastPower = -999;
   int lastSOC = -1;
   float lastVoltage = -1;
   float lastCurrent = -999;
   float lastTemp = -999;
+  float lastCapacity = -1;
+  float lastTotalCapacity = -1;
 
   void drawFrame() {
     tft.fillScreen(COLOR_BG);
-
-    // 顶部标题栏
     tft.fillRect(0, 0, SCREEN_WIDTH, 28, COLOR_DIM);
     tft.drawFastHLine(0, 28, SCREEN_WIDTH, COLOR_PRIMARY);
-
     tft.setTextColor(COLOR_TEXT, COLOR_DIM);
     tft.setTextSize(1);
     tft.setFreeFont(nullptr);
     tft.drawString("JK-BMS MONITOR", SCREEN_WIDTH / 2, 14);
-
-    // 分隔线
     tft.drawFastHLine(10, 155, SCREEN_WIDTH - 20, COLOR_GRID);
     tft.drawFastHLine(10, 235, SCREEN_WIDTH - 20, COLOR_GRID);
-
-    // 底部状态栏背景
     tft.fillRect(0, 295, SCREEN_WIDTH, 25, COLOR_DIM);
     tft.drawFastHLine(0, 295, SCREEN_WIDTH, COLOR_SECONDARY);
   }
@@ -454,20 +426,16 @@ private:
     float power = bmsData.batteryPower;
     bool isDischarge = bmsData.discharging;
 
-    // 只重绘变化的部分
     if (abs(power - lastPower) < 1 && lastSOC == bmsData.soc) return;
     lastPower = power;
     lastSOC = bmsData.soc;
 
-    // 功率区域背景 (32-150)
     tft.fillRect(0, 32, SCREEN_WIDTH, 120, COLOR_BG);
 
-    // 功率标签
     tft.setTextColor(COLOR_DIM, COLOR_BG);
     tft.setTextSize(1);
     tft.drawString(isDischarge ? "DISCHARGE POWER" : "CHARGE POWER", SCREEN_WIDTH / 2, 44);
 
-    // 功率数值 (超大字)
     uint16_t powerColor = isDischarge ? COLOR_ACCENT : COLOR_PRIMARY;
     if (power < 10) powerColor = COLOR_DIM;
 
@@ -490,7 +458,6 @@ private:
       tft.drawString("W", SCREEN_WIDTH / 2 + 55, 85);
     }
 
-    // 功率进度条 (动态条)
     int barWidth = SCREEN_WIDTH - 40;
     int barX = 20;
     int barY = 125;
@@ -504,7 +471,6 @@ private:
 
     if (fillWidth > 0) {
       uint16_t barColor = isDischarge ? COLOR_ACCENT : COLOR_PRIMARY;
-      // 渐变效果
       for (int i = 0; i < fillWidth - 4; i++) {
         uint16_t c = barColor;
         if (i > fillWidth * 0.7) c = COLOR_WARNING;
@@ -512,12 +478,10 @@ private:
       }
     }
 
-    // SOC环形指示 (右上角小圆)
     drawSOCRing(190, 70, 22, bmsData.soc);
   }
 
   void drawSOCRing(int cx, int cy, int r, int soc) {
-    // 背景圆环
     for (int i = 0; i < 360; i += 6) {
       float rad = i * PI / 180;
       int x1 = cx + (r - 3) * cos(rad);
@@ -527,7 +491,6 @@ private:
       tft.drawLine(x1, y1, x2, y2, COLOR_DIM);
     }
 
-    // 进度弧
     int endAngle = soc * 360 / 100;
     uint16_t socColor = soc > 50 ? COLOR_PRIMARY : (soc > 20 ? COLOR_WARNING : COLOR_ACCENT);
 
@@ -540,7 +503,6 @@ private:
       tft.drawLine(x1, y1, x2, y2, socColor);
     }
 
-    // SOC数值
     tft.setTextColor(COLOR_TEXT, COLOR_BG);
     tft.setTextSize(1);
     char socStr[8];
@@ -556,15 +518,12 @@ private:
     lastCapacity = remain;
     lastTotalCapacity = total;
 
-    // 区域 (160-230)
     tft.fillRect(0, 160, SCREEN_WIDTH, 72, COLOR_BG);
 
-    // 容量标签
     tft.setTextColor(COLOR_DIM, COLOR_BG);
     tft.setTextSize(1);
     tft.drawString("BATTERY CAPACITY", SCREEN_WIDTH / 2, 168);
 
-    // 容量数值
     char capStr[32];
     if (total > 0) {
       sprintf(capStr, "%.1f / %.1f", remain, total);
@@ -580,7 +539,6 @@ private:
     tft.setTextColor(COLOR_DIM, COLOR_BG);
     tft.drawString("Ah", SCREEN_WIDTH / 2, 212);
 
-    // 容量进度条
     int barWidth = SCREEN_WIDTH - 40;
     int barX = 20;
     int barY = 222;
@@ -604,10 +562,8 @@ private:
     lastVoltage = voltage;
     lastCurrent = current;
 
-    // 区域 (240-290)
     tft.fillRect(0, 240, SCREEN_WIDTH, 52, COLOR_BG);
 
-    // 左 - 电压
     tft.setTextColor(COLOR_DIM, COLOR_BG);
     tft.setTextSize(1);
     tft.drawString("VOLTAGE", 60, 248);
@@ -618,7 +574,6 @@ private:
     tft.setTextSize(2);
     tft.drawString(vStr, 60, 268);
 
-    // 右 - 电流
     tft.setTextColor(COLOR_DIM, COLOR_BG);
     tft.setTextSize(1);
     tft.drawString("CURRENT", 180, 248);
@@ -640,10 +595,8 @@ private:
     if (abs(maxTemp - lastTemp) < 0.5) return;
     lastTemp = maxTemp;
 
-    // 底部状态栏 (295-320)
     tft.fillRect(0, 296, SCREEN_WIDTH, 24, COLOR_DIM);
 
-    // 温度
     char tempStr[32];
     sprintf(tempStr, "T:%.0fC", maxTemp);
 
@@ -652,13 +605,11 @@ private:
     tft.setTextSize(1);
     tft.drawString(tempStr, 45, 308);
 
-    // 串数
     char cellStr[16];
     sprintf(cellStr, "%dS", bmsData.cellCount);
     tft.setTextColor(COLOR_TEXT, COLOR_DIM);
     tft.drawString(cellStr, 120, 308);
 
-    // 循环次数
     char cycleStr[16];
     sprintf(cycleStr, "Cyc:%.0f", bmsData.cycleCount);
     tft.setTextColor(COLOR_TEXT, COLOR_DIM);
@@ -677,15 +628,11 @@ private:
     lastDischarge = bmsData.discharging;
     lastBalance = bmsData.balancing;
 
-    // 状态指示灯 (标题栏右侧)
     int y = 14;
     tft.fillCircle(185, y, 4, bmsData.charging ? COLOR_PRIMARY : COLOR_DIM);
     tft.fillCircle(200, y, 4, bmsData.discharging ? COLOR_ACCENT : COLOR_DIM);
     tft.fillCircle(215, y, 4, bmsData.balancing ? COLOR_WARNING : COLOR_DIM);
   }
-
-  float lastCapacity = -1;
-  float lastTotalCapacity = -1;
 };
 
 DashboardUI dashboard;
@@ -701,10 +648,8 @@ void setup() {
   DEBUG_PRINTLN("  JKBMS 电竞风监控仪表盘");
   DEBUG_PRINTLN("================================");
 
-  // 初始化显示屏
   dashboard.begin();
 
-  // 启动画面
   tft.setTextColor(COLOR_PRIMARY, COLOR_BG);
   tft.setTextSize(2);
   tft.drawString("JKBMS", SCREEN_WIDTH / 2, 120);
@@ -712,7 +657,6 @@ void setup() {
   tft.setTextSize(1);
   tft.drawString("Initializing BLE...", SCREEN_WIDTH / 2, 150);
 
-  // 初始化BLE
   if (!jkbms.begin()) {
     DEBUG_PRINTLN("BLE初始化失败");
     tft.setTextColor(COLOR_ACCENT, COLOR_BG);
@@ -725,30 +669,11 @@ void setup() {
 }
 
 // ============================================================
-// JKBMS_BLE 静态回调实现
-// ============================================================
-void JKBMS_BLE::notifyCallback(NimBLERemoteCharacteristic* pChr, uint8_t* pData, size_t length, bool isNotify) {
-  jkbms.handleNotification(pData, length);
-}
-
-void JKBMS_BLE::ScanCallbacks::onResult(const NimBLEAdvertisedDevice* advertisedDevice) {
-  std::string addr = advertisedDevice->getAddress().toString();
-  if (addr == jkbms.targetMAC) {
-    DEBUG_PRINTF("找到BMS: %s\n", addr.c_str());
-    jkbms.advDevice = advertisedDevice;
-    jkbms.doConnect = true;
-    NimBLEDevice::getScan()->stop();
-  }
-}
-
-// ============================================================
 // 主循环
 // ============================================================
 void loop() {
-  // BLE通信处理
   jkbms.loop();
 
-  // 显示刷新
   static unsigned long lastDisplayUpdate = 0;
   if (millis() - lastDisplayUpdate > DISPLAY_REFRESH_MS) {
     dashboard.update();
