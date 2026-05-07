@@ -48,6 +48,9 @@ TFT_eSPI tft = TFT_eSPI();
 #define SCREEN_WIDTH  240
 #define SCREEN_HEIGHT 320
 
+// ----- 背光引脚 -----
+#define BACKLIGHT_PIN 21
+
 // ----- 数据刷新间隔 -----
 #define DISPLAY_REFRESH_MS 500
 #define BMS_POLL_MS 2000
@@ -360,6 +363,10 @@ JKBMS_BLE jkbms(BMS_MAC_ADDRESS);
 class DashboardUI {
 public:
   void begin() {
+    // 配置背光引脚 (IO21，高电平点亮)
+    pinMode(BACKLIGHT_PIN, OUTPUT);
+    digitalWrite(BACKLIGHT_PIN, HIGH);
+
     tft.init();
     tft.setRotation(0);
     tft.fillScreen(COLOR_BG);
