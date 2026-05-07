@@ -11,16 +11,19 @@
 #define TFT_WIDTH  240
 #define TFT_HEIGHT 320
 
-// SPI 引脚定义 (根据你的ESP32-32E接线修改)
-#define TFT_MISO 19
-#define TFT_MOSI 23
-#define TFT_SCLK 18
-#define TFT_CS   5
-#define TFT_DC   16
-#define TFT_RST  17
+// ============================================================
+// ESP32-32E 板载 LCD 引脚定义 (E32R28T-1 开发板)
+// 来源: LCDWIKI E32R28T-1 Arduino Demo Instructions
+// ============================================================
+#define TFT_MISO 12   // IO12 - LCD SPI MISO
+#define TFT_MOSI 13   // IO13 - LCD SPI MOSI
+#define TFT_SCLK 14   // IO14 - LCD SPI SCK
+#define TFT_CS   15   // IO15 - LCD 片选 (低电平有效)
+#define TFT_DC   2    // IO2  - LCD RS/DC (高=data, 低=command)
+#define TFT_RST  -1   // EN   - 与ESP32复位共享,设为-1由库自动处理
 
-// 背光引脚 (可选, -1表示不使用)
-#define TFT_BL   -1
+// 背光引脚 (高电平点亮)
+#define TFT_BL   21   // IO21 - LCD 背光控制
 
 // SPI 频率
 #define SPI_FREQUENCY  40000000

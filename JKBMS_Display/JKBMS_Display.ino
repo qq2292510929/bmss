@@ -561,6 +561,11 @@ void setup() {
   // 初始化TFT
   tft.init();
   tft.setRotation(1); // 横屏
+
+  // 开启背光 (IO21, 高电平点亮)
+  pinMode(21, OUTPUT);
+  digitalWrite(21, HIGH);
+
   tft.fillScreen(COLOR_BG);
 
   drawBootScreen();
