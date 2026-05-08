@@ -600,6 +600,7 @@ void setup() {
   SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
   tft.init(SCREEN_W, SCREEN_H);
   tft.setRotation(0);
+  tft.invertDisplay(true);
   tft.fillScreen(CLR_BG);
 
   pinMode(TFT_BL, OUTPUT);
