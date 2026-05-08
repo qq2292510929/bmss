@@ -281,7 +281,6 @@ bool connectToBMS() {
 
   pClient = BLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());
-  pClient->setConnectionParams(12, 12, 0, 150);
 
   Serial.println(F("[BLE] 调用 pClient->connect()..."));
   if (!pClient->connect(advDevice)) {
@@ -364,7 +363,6 @@ bool connectByMAC(String mac) {
   BLEAddress bleAddr(mac.c_str());
   pClient = BLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());
-  pClient->setConnectionParams(12, 12, 0, 150);
 
   Serial.printf("[BLE] 直接连接到地址: %s\n", bleAddr.toString().c_str());
   if (!pClient->connect(bleAddr)) {
