@@ -1,5 +1,5 @@
 /*
- * JK BMS 蓝牙监控仪表盘
+ * JK BMS 蓝牙监控仪表盘 (全中文版)
  * 硬件: ESP32-32E + ST7789 2.8寸 240x320
  * BMS:  JK_BD4A24S10P (JK02_32S协议)
  * 风格: 极简电竞风 / 新能源车机仪表盘
@@ -7,6 +7,7 @@
  * 需安装库:
  *   - Adafruit ST7789
  *   - Adafruit GFX Library
+ *   - U8g2_for_Adafruit_GFX  (中文字体支持)
  *   - ESP32 BLE Arduino (随ESP32核心自带)
  */
 
@@ -17,29 +18,26 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
+#include <U8g2_for_Adafruit_GFX.h>
 
 // ===================== 引脚配置 =====================
-// ESP32-32E 开发板自带 LCD 引脚配置
-#define TFT_CS    15  // TFT_CS → IO15
-#define TFT_DC    2   // TFT_RS → IO2
-#define TFT_RST   -1  // EN共享引脚，无需软件控制
-#define TFT_SCLK  14  // TFT_SCK → IO14
-#define TFT_MOSI  13  // TFT_MOSI → IO13
-#define TFT_BL    21  // TFT_BL → IO21
+#define TFT_CS    15
+#define TFT_DC    2
+#define TFT_RST   -1
+#define TFT_SCLK  14
+#define TFT_MOSI  13
+#define TFT_BL    21
 
 // ===================== BLE 配置 =====================
 #define BMS_MAC  "98:DA:20:07:B9:00"
 #define BMS_NAME "JK_BD4A24S10P"
 
-// BLE Service / Characteristic UUID
 static BLEUUID serviceUUID((uint16_t)0xFFE0);
 static BLEUUID charUUID((uint16_t)0xFFE1);
 
-// 命令字节
 #define CMD_CELL_INFO   0x96
 #define CMD_DEVICE_INFO 0x97
 
-// 帧参数
 #define FRAME_HEADER_0 0x55
 #define FRAME_HEADER_1 0xAA
 #define FRAME_HEADER_2 0xEB
@@ -52,7 +50,6 @@ static BLEUUID charUUID((uint16_t)0xFFE1);
 #define SCREEN_W 240
 #define SCREEN_H 320
 
-// RGB565 颜色定义 - 电竞风配色
 #define CLR_BG          0x0000
 #define CLR_CYAN        0x07FF
 #define CLR_GREEN       0x07E0
@@ -70,6 +67,7 @@ static BLEUUID charUUID((uint16_t)0xFFE1);
 
 // ===================== 显示对象 =====================
 Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
+U8g2_for_Adafruit_GFX u8g2;
 
 // ===================== BMS 数据结构 =====================
 struct BMSData {
@@ -99,13 +97,11 @@ bool doConnect = false;
 bool doScan = false;
 BLEAdvertisedDevice* advDevice = nullptr;
 
-// 帧缓冲
 uint8_t frameBuf[MAX_FRAME_SIZE];
 int framePos = 0;
 bool frameStarted = false;
 volatile bool newDataReady = false;
 
-// 定时器
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastCommandTime = 0;
 unsigned long lastScanTime = 0;
@@ -295,6 +291,28 @@ bool connectToBMS() {
   return true;
 }
 
+// ===================== 中文绘制辅助 =====================
+void drawCN(const char* text, int x, int y, uint16_t color) {
+  u8g2.setForegroundColor(color);
+  u8g2.setCursor(x, y);
+  u8g2.print(text);
+}
+
+void drawCN12(const char* text, int x, int y, uint16_t color) {
+  u8g2.setFont(u8g2_font_wqy12_t_chinese3);
+  drawCN(text, x, y, color);
+}
+
+void drawCN14(const char* text, int x, int y, uint16_t color) {
+  u8g2.setFont(u8g2_font_wqy14_t_chinese3);
+  drawCN(text, x, y, color);
+}
+
+void drawCN16(const char* text, int x, int y, uint16_t color) {
+  u8g2.setFont(u8g2_font_wqy16_t_chinese3);
+  drawCN(text, x, y, color);
+}
+
 // ===================== 显示辅助函数 =====================
 uint16_t getSocColor(int soc) {
   if (soc > 60) return CLR_GREEN;
@@ -335,39 +353,16 @@ void drawProgressBar(int x, int y, int w, int h, int percent, uint16_t fillColor
   drawRoundRect(x, y, w, h, 3, CLR_GRAY);
 }
 
-void drawCenteredText(const char* text, int y, uint8_t size, uint16_t color) {
-  int16_t x1, y1;
-  uint16_t w, h;
-  tft.getTextBounds(text, 0, y, &x1, &y1, &w, &h);
-  tft.setTextSize(size);
-  tft.setTextColor(color);
-  tft.setCursor((SCREEN_W - w) / 2, y);
-  tft.print(text);
-}
-
-void drawRightText(const char* text, int rightX, int y, uint8_t size, uint16_t color) {
-  int16_t x1, y1;
-  uint16_t w, h;
-  tft.getTextBounds(text, 0, y, &x1, &y1, &w, &h);
-  tft.setTextSize(size);
-  tft.setTextColor(color);
-  tft.setCursor(rightX - w, y);
-  tft.print(text);
-}
-
 // ===================== 主界面绘制 =====================
 void drawDashboard() {
   tft.fillScreen(CLR_BG);
 
   // ---- 顶部标题栏 ----
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_DIM_CYAN);
-  tft.setCursor(8, 6);
-  tft.print(F("JK BMS MONITOR"));
+  drawCN12("JK BMS 监控", 8, 4, CLR_DIM_CYAN);
 
   tft.setTextSize(1);
   tft.setTextColor(CLR_DARK_GRAY);
-  tft.setCursor(8, 18);
+  tft.setCursor(8, 20);
   tft.print(BMS_NAME);
 
   if (bleConnected) {
@@ -378,18 +373,15 @@ void drawDashboard() {
     tft.drawCircle(SCREEN_W - 10, 12, 6, CLR_DIM_RED);
   }
 
-  tft.drawFastHLine(0, 30, SCREEN_W, CLR_ACCENT);
+  tft.drawFastHLine(0, 32, SCREEN_W, CLR_ACCENT);
 
   // ---- 功率区域 (主视觉) ----
   uint16_t pwrColor = getPowerColor();
   uint16_t pwrBarColor = getPowerBarColor();
 
-  tft.fillRect(0, 32, SCREEN_W, 4, pwrBarColor);
+  tft.fillRect(0, 34, SCREEN_W, 4, pwrBarColor);
 
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_GRAY);
-  tft.setCursor(10, 42);
-  tft.print(F("POWER"));
+  drawCN12("功率", 10, 42, CLR_GRAY);
 
   float absPower = fabs(bms.power);
   char pwrStr[16];
@@ -408,7 +400,7 @@ void drawDashboard() {
 
   tft.setTextSize(4);
   tft.setTextColor(pwrColor);
-  tft.setCursor(10, 56);
+  tft.setCursor(10, 58);
   if (bms.isCharging && bms.dataValid) tft.print(F("+"));
   else if (bms.isDischarging && bms.dataValid) tft.print(F("-"));
   tft.print(pwrStr);
@@ -418,22 +410,17 @@ void drawDashboard() {
   int pwrLen = strlen(pwrStr);
   int unitX = 10 + (bms.isCharging || bms.isDischarging ? 24 : 0) + pwrLen * 24;
   if (unitX > SCREEN_W - 30) unitX = SCREEN_W - 30;
-  tft.setCursor(unitX, 72);
+  tft.setCursor(unitX, 74);
   tft.print(F("W"));
 
-  tft.setTextSize(2);
-  tft.setTextColor(pwrColor);
-  tft.setCursor(10, 98);
   if (!bms.dataValid) {
-    tft.setTextColor(CLR_GRAY);
-    tft.print(F("WAITING..."));
+    drawCN14("等待数据...", 10, 100, CLR_GRAY);
   } else if (bms.isCharging) {
-    tft.print(F("\x18 CHARGING"));
+    drawCN14("\xe2\x96\xb2 充电中", 10, 100, CLR_GREEN);
   } else if (bms.isDischarging) {
-    tft.print(F("\x19 DISCHARGE"));
+    drawCN14("\xe2\x96\xbc 放电中", 10, 100, CLR_RED);
   } else {
-    tft.setTextColor(CLR_GRAY);
-    tft.print(F("-- IDLE"));
+    drawCN14("-- 待机", 10, 100, CLR_GRAY);
   }
 
   tft.drawFastHLine(10, 122, SCREEN_W - 20, CLR_DARK_GRAY);
@@ -441,10 +428,7 @@ void drawDashboard() {
   // ---- 电池容量区域 ----
   uint16_t socColor = getSocColor(bms.soc);
 
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_GRAY);
-  tft.setCursor(10, 128);
-  tft.print(F("BATTERY"));
+  drawCN12("电池", 10, 128, CLR_GRAY);
 
   char socStr[8];
   if (bms.dataValid) {
@@ -487,12 +471,10 @@ void drawDashboard() {
   tft.drawFastHLine(10, 234, SCREEN_W - 20, CLR_DARK_GRAY);
 
   // ---- 底部状态区域 ----
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_CYAN);
-  tft.setCursor(10, 242);
-  tft.print(F("TEMP"));
+  drawCN12("温度", 10, 240, CLR_CYAN);
 
   tft.setTextSize(2);
+  tft.setTextColor(CLR_WHITE);
   tft.setCursor(10, 256);
   if (bms.dataValid) {
     char t1Str[12];
@@ -504,12 +486,10 @@ void drawDashboard() {
     tft.print(F("--"));
   }
 
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_YELLOW);
-  tft.setCursor(130, 242);
-  tft.print(F("VOLTAGE"));
+  drawCN12("电压", 130, 240, CLR_YELLOW);
 
   tft.setTextSize(2);
+  tft.setTextColor(CLR_WHITE);
   tft.setCursor(130, 256);
   if (bms.dataValid) {
     char vStr[12];
@@ -521,12 +501,10 @@ void drawDashboard() {
     tft.print(F("--"));
   }
 
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_ORANGE);
-  tft.setCursor(10, 284);
-  tft.print(F("CURRENT"));
+  drawCN12("电流", 10, 282, CLR_ORANGE);
 
   tft.setTextSize(2);
+  tft.setTextColor(CLR_WHITE);
   tft.setCursor(10, 298);
   if (bms.dataValid) {
     char iStr[12];
@@ -539,15 +517,9 @@ void drawDashboard() {
   }
 
   if (bms.dataValid && (millis() - bms.lastUpdate > DATA_TIMEOUT)) {
-    tft.setTextSize(1);
-    tft.setTextColor(CLR_RED);
-    tft.setCursor(130, 298);
-    tft.print(F("STALE!"));
+    drawCN12("超时!", 160, 298, CLR_RED);
   } else if (bleConnected) {
-    tft.setTextSize(1);
-    tft.setTextColor(CLR_DARK_GRAY);
-    tft.setCursor(130, 298);
-    tft.print(F("LIVE"));
+    drawCN12("在线", 170, 298, CLR_DIM_GREEN);
   }
 }
 
@@ -555,28 +527,18 @@ void drawDashboard() {
 void drawSplash() {
   tft.fillScreen(CLR_BG);
 
-  tft.drawFastHLine(40, 100, 160, CLR_ACCENT);
-  tft.drawFastHLine(40, 220, 160, CLR_ACCENT);
+  tft.drawFastHLine(40, 90, 160, CLR_ACCENT);
+  tft.drawFastHLine(40, 230, 160, CLR_ACCENT);
 
-  tft.setTextSize(3);
-  tft.setTextColor(CLR_CYAN);
-  tft.setCursor(40, 120);
-  tft.print(F("JK BMS"));
-
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_GRAY);
-  tft.setCursor(40, 150);
-  tft.print(F("Bluetooth Monitor"));
+  drawCN16("JK BMS", 55, 100, CLR_CYAN);
+  drawCN14("蓝牙监控仪表盘", 35, 130, CLR_GRAY);
 
   tft.setTextSize(1);
   tft.setTextColor(CLR_DIM_CYAN);
-  tft.setCursor(40, 175);
+  tft.setCursor(40, 160);
   tft.print(BMS_NAME);
 
-  tft.setTextSize(1);
-  tft.setTextColor(CLR_GRAY);
-  tft.setCursor(40, 195);
-  tft.print(F("Scanning..."));
+  drawCN12("扫描中...", 70, 190, CLR_GRAY);
 }
 
 // ===================== SETUP =====================
@@ -602,6 +564,10 @@ void setup() {
   tft.setRotation(0);
   tft.invertDisplay(true);
   tft.fillScreen(CLR_BG);
+
+  u8g2.begin(tft);
+  u8g2.setFontMode(1);
+  u8g2.setFontPosTop();
 
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
