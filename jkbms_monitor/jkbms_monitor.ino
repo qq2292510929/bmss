@@ -181,9 +181,23 @@ void hexDump(const uint8_t* data, int start, int len) {
   }
 }
 
+uint32_t readU32LE(int o) {
+  return (uint32_t)frameBuf[o] | ((uint32_t)frameBuf[o+1]<<8) |
+         ((uint32_t)frameBuf[o+2]<<16) | ((uint32_t)frameBuf[o+3]<<24);
+}
+int32_t readI32LE(int o) {
+  return (int32_t)readU32LE(o);
+}
+uint16_t readU16BE(int o) {
+  return ((uint16_t)frameBuf[o]<<8) | frameBuf[o+1];
+}
+int16_t readI16BE(int o) {
+  return (int16_t)readU16BE(o);
+}
+
 void parseFrame() {
   if (framePos < MIN_FRAME_SIZE) {
-    Serial.printf("[FRAME] 帧太短: %d bytes (需要>=300)\n", framePos);
+    Serial.printf("[FRAME] 帧太短: %d bytes\n", framePos);
     return;
   }
 
@@ -191,67 +205,98 @@ void parseFrame() {
   uint8_t crcRecv = frameBuf[framePos - 1];
   bool crcOk = (crcCalc == crcRecv);
 
-  Serial.printf("[FRAME] 收到 %d 字节, 类型=0x%02X, CRC=%s\n",
+  Serial.printf("[FRAME] %d字节 类型=0x%02X CRC=%s\n",
     framePos, frameBuf[4], crcOk ? "OK" : "FAIL");
-  Serial.print(F("[FRAME] 头20字节: "));
-  hexDump(frameBuf, 0, 20);
-  Serial.println();
 
   if (!crcOk) {
-    Serial.printf("[FRAME] CRC错误! 计算=0x%02X 接收=0x%02X\n", crcCalc, crcRecv);
+    Serial.printf("[FRAME] CRC错! 算=0x%02X 收=0x%02X\n", crcCalc, crcRecv);
     return;
   }
-
-  if (frameBuf[4] == 0x03) {
-    Serial.println(F("[FRAME] 这是设备信息帧(类型0x03), 跳过"));
-    return;
-  }
-
+  if (frameBuf[4] == 0x03) { Serial.println(F("[FRAME] 设备信息帧,跳过")); return; }
   if (frameBuf[4] != FRAME_TYPE_CELL_INFO) {
-    Serial.printf("[FRAME] 未知帧类型: 0x%02X, 跳过\n", frameBuf[4]);
-    return;
+    Serial.printf("[FRAME] 未知类型: 0x%02X\n", frameBuf[4]); return;
   }
 
-  Serial.print(F("[FRAME] 电压区(118-121): "));
-  hexDump(frameBuf, 118, 4);
-  Serial.print(F("  电流区(126-129): "));
-  hexDump(frameBuf, 126, 4);
-  Serial.print(F("  SOC(141): "));
-  Serial.printf("0x%02X=%d", frameBuf[141], frameBuf[141]);
-  Serial.print(F("  温度1(130-131): "));
-  hexDump(frameBuf, 130, 2);
-  Serial.println();
+  // 从电芯电压计算总电压(电芯电压已验证正确)
+  float calcVoltage = 0;
+  int cellCount = 0;
+  for (int i = 0; i < 32; i++) {
+    uint16_t cv = readU16BE(6 + i * 2);
+    if (cv > 0) { calcVoltage += cv * 0.001f; cellCount++; }
+  }
+  Serial.printf("[FRAME] %d个电芯, 计算总电压=%.2fV\n", cellCount, calcVoltage);
 
-  uint32_t rawV_le = (uint32_t)frameBuf[118] | ((uint32_t)frameBuf[119]<<8) |
-                     ((uint32_t)frameBuf[120]<<16) | ((uint32_t)frameBuf[121]<<24);
-  uint32_t rawV_be = ((uint32_t)frameBuf[118]<<24) | ((uint32_t)frameBuf[119]<<16) |
-                     ((uint32_t)frameBuf[120]<<8) | (uint32_t)frameBuf[121];
-  Serial.printf("[FRAME] 电压 LE=%u(%.3fV) BE=%u(%.3fV)\n",
-    rawV_le, rawV_le*0.001f, rawV_be, rawV_be*0.001f);
+  // 搜索帧中匹配总电压的偏移量
+  uint32_t expectedMv = (uint32_t)(calcVoltage * 1000);
+  Serial.print(F("[FRAME] 搜索电压值")); Serial.print(expectedMv); Serial.println(F("mV:"));
+  for (int o = 100; o < framePos - 3; o++) {
+    uint32_t v = readU32LE(o);
+    if (v == expectedMv) {
+      Serial.printf("  找到! 偏移%d LE=%u(%.3fV)\n", o, v, v*0.001f);
+    }
+    if (abs((int)(v - expectedMv)) < 100) {
+      Serial.printf("  接近! 偏移%d LE=%u(%.3fV) 差%d\n", o, v, v*0.001f, (int)(v-expectedMv));
+    }
+  }
 
-  bms.voltage = rawV_le * 0.001f;
+  // 搜索SOC值(尝试常见范围0-100)
+  Serial.println(F("[FRAME] 搜索SOC(0x00-0x64):"));
+  for (int o = 130; o < 180; o++) {
+    if (frameBuf[o] <= 100 && frameBuf[o] > 0) {
+      Serial.printf("  偏移%d: %d%%\n", o, frameBuf[o]);
+    }
+  }
 
-  uint32_t rawP_le = (uint32_t)frameBuf[122] | ((uint32_t)frameBuf[123]<<8) |
-                     ((uint32_t)frameBuf[124]<<16) | ((uint32_t)frameBuf[125]<<24);
-  bms.power = rawP_le * 0.001f;
+  // 搜索温度值(常见范围15-45°C → 150-450 原始值)
+  Serial.println(F("[FRAME] 搜索温度(15-45°C):"));
+  for (int o = 130; o < 180; o++) {
+    int16_t t = readI16BE(o);
+    float tc = t * 0.1f;
+    if (tc >= 10.0f && tc <= 60.0f) {
+      Serial.printf("  偏移%d: %d(%.1f°C)\n", o, t, tc);
+    }
+  }
 
-  int32_t rawI_le = (int32_t)((uint32_t)frameBuf[126] | ((uint32_t)frameBuf[127]<<8) |
-                   ((uint32_t)frameBuf[128]<<16) | ((uint32_t)frameBuf[129]<<24));
-  bms.current = rawI_le * 0.001f;
-
-  int16_t rT1 = (int16_t)(frameBuf[130] | (frameBuf[131]<<8));
-  bms.temp1 = rT1 * 0.1f;
-  int16_t rT2 = (int16_t)(frameBuf[132] | (frameBuf[133]<<8));
-  bms.temp2 = rT2 * 0.1f;
+  // 使用官方文档偏移量解析
+  bms.voltage = calcVoltage; // 用计算值更可靠
+  bms.power = readU32LE(122) * 0.001f;
+  bms.current = readI32LE(126) * 0.001f;
+  bms.temp1 = readI16BE(130) * 0.1f;
+  bms.temp2 = readI16BE(132) * 0.1f;
   bms.soc = frameBuf[141];
+  bms.capacity_remain = readU32LE(142) * 0.001f;
+  bms.capacity_nominal = readU32LE(146) * 0.001f;
 
-  uint32_t rawCR_le = (uint32_t)frameBuf[142] | ((uint32_t)frameBuf[143]<<8) |
-                      ((uint32_t)frameBuf[144]<<16) | ((uint32_t)frameBuf[145]<<24);
-  bms.capacity_remain = rawCR_le * 0.001f;
+  // 如果官方偏移量数据不合理，尝试+32偏移(JK02_32S扩展)
+  if (bms.soc == 0 || bms.soc > 100) {
+    Serial.println(F("[FRAME] 官方偏移SOC无效,尝试+32偏移..."));
+    float v2 = readU32LE(150) * 0.001f;
+    float p2 = readU32LE(154) * 0.001f;
+    float i2 = readI32LE(158) * 0.001f;
+    float t1_2 = readI16BE(162) * 0.1f;
+    float t2_2 = readI16BE(164) * 0.1f;
+    int soc2 = frameBuf[173];
+    float cr2 = readU32LE(174) * 0.001f;
+    float cn2 = readU32LE(178) * 0.001f;
+    Serial.printf("[FRAME] +32偏移: V=%.2f P=%.1f I=%.2f SOC=%d%% T=%.1f Cap=%.1f/%.1f\n",
+      v2, p2, i2, soc2, t1_2, cr2, cn2);
 
-  uint32_t rawCN_le = (uint32_t)frameBuf[146] | ((uint32_t)frameBuf[147]<<8) |
-                      ((uint32_t)frameBuf[148]<<16) | ((uint32_t)frameBuf[149]<<24);
-  bms.capacity_nominal = rawCN_le * 0.001f;
+    // 如果+32偏移的SOC更合理，使用+32偏移
+    if (soc2 > 0 && soc2 <= 100) {
+      Serial.println(F("[FRAME] 使用+32偏移量!"));
+      bms.voltage = v2 > 0 ? v2 : calcVoltage;
+      bms.power = p2;
+      bms.current = i2;
+      bms.temp1 = t1_2;
+      bms.temp2 = t2_2;
+      bms.soc = soc2;
+      bms.capacity_remain = cr2;
+      bms.capacity_nominal = cn2;
+    }
+  }
+
+  // 如果电压仍然为0，用计算值
+  if (bms.voltage < 1.0f) bms.voltage = calcVoltage;
 
   bms.isCharging    = (bms.current > 0.05f);
   bms.isDischarging = (bms.current < -0.05f);
