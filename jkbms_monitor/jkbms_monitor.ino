@@ -118,6 +118,26 @@ struct PrevDisplay {
 };
 PrevDisplay prev;
 
+// ===================== BLE 客户端回调 =====================
+class MyClientCallback : public BLEClientCallbacks {
+  void onConnect(BLEClient*) {
+    bleConnected = true;
+    isConnecting = false;
+    connectFailCount = 0;
+    needFullRedraw = true;
+    Serial.println(F("[BLE] 已连接"));
+  }
+  void onDisconnect(BLEClient*) {
+    bleConnected = false;
+    isConnecting = false;
+    pWriteChar = nullptr;
+    pNotifyChar = nullptr;
+    needFullRedraw = true;
+    lastConnectAttempt = 0;
+    Serial.println(F("[BLE] 已断开,将自动重连"));
+  }
+};
+
 // ===================== BLE 全局变量 =====================
 BLEClient* pClient = nullptr;
 BLERemoteCharacteristic* pWriteChar = nullptr;
@@ -241,26 +261,6 @@ void notifyCallback(BLERemoteCharacteristic*, uint8_t* pData, size_t length, boo
     framePos = 0;
   }
 }
-
-// ===================== BLE 客户端回调 =====================
-class MyClientCallback : public BLEClientCallbacks {
-  void onConnect(BLEClient*) {
-    bleConnected = true;
-    isConnecting = false;
-    connectFailCount = 0;
-    needFullRedraw = true;
-    Serial.println(F("[BLE] 已连接"));
-  }
-  void onDisconnect(BLEClient*) {
-    bleConnected = false;
-    isConnecting = false;
-    pWriteChar = nullptr;
-    pNotifyChar = nullptr;
-    needFullRedraw = true;
-    lastConnectAttempt = 0;
-    Serial.println(F("[BLE] 已断开,将自动重连"));
-  }
-};
 
 // ===================== 扫描回调 =====================
 class DebugScanCallback : public BLEAdvertisedDeviceCallbacks {
