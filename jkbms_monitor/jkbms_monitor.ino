@@ -282,8 +282,9 @@ bool connectToBMS() {
   pClient = BLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());
 
-  Serial.println(F("[BLE] 尝试连接(带绑定)..."));
+  Serial.println(F("[BLE] 尝试连接(随机地址类型)..."));
   
+  BLEAddress targetAddr(advDevice->getAddress());
   bool connected = false;
   for (int retry = 0; retry < 3; retry++) {
     if (retry > 0) {
@@ -291,7 +292,7 @@ bool connectToBMS() {
       delay(500);
     }
     
-    if (pClient->connect(advDevice, BLE_ADDR_TYPE_RANDOM)) {
+    if (pClient->connect(targetAddr, BLE_ADDR_TYPE_RANDOM)) {
       connected = true;
       break;
     }
