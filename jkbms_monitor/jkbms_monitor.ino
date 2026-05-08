@@ -1,5 +1,5 @@
 /*
- * JK BMS 蓝牙监控仪表盘 (全中文版)
+ * JK BMS 蓝牙监控仪表盘 (全中文版 + 无闪烁)
  * 硬件: ESP32-32E + ST7789 2.8寸 240x320
  * BMS:  JK_BD4A24S10P (JK02_32S协议)
  * 风格: 极简电竞风 / 新能源车机仪表盘
@@ -7,7 +7,7 @@
  * 需安装库:
  *   - Adafruit ST7789
  *   - Adafruit GFX Library
- *   - U8g2_for_Adafruit_GFX  (中文字体支持)
+ *   - U8g2  (中文字体渲染)
  *   - ESP32 BLE Arduino (随ESP32核心自带)
  */
 
@@ -18,7 +18,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
-#include <U8g2_for_Adafruit_GFX.h>
+#include <U8g2lib.h>
 
 // ===================== 引脚配置 =====================
 #define TFT_CS    15
@@ -67,7 +67,14 @@ static BLEUUID charUUID((uint16_t)0xFFE1);
 
 // ===================== 显示对象 =====================
 Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
-U8g2_for_Adafruit_GFX u8g2;
+
+// U8g2 用于中文渲染 (SSD1306 128x64 软件I2C 假引脚)
+// 不调用 begin()，仅用其缓冲区渲染中文再拷贝到TFT
+U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2CN(U8G2_R0, 33, 34, U8X8_PIN_NONE);
+
+// 中文渲染RGB缓冲区 (最大128x20像素)
+#define CN_BUF_MAX_PIXELS (128 * 20)
+static uint16_t cnRgbBuf[CN_BUF_MAX_PIXELS];
 
 // ===================== BMS 数据结构 =====================
 struct BMSData {
@@ -87,6 +94,22 @@ struct BMSData {
 
 BMSData bms;
 
+// 上次显示值 (用于变化检测, 减少不必要的重绘)
+struct PrevDisplay {
+  float power;
+  float voltage;
+  float current;
+  float temp1;
+  int   soc;
+  float cap_remain;
+  float cap_nominal;
+  bool  isCharging;
+  bool  isDischarging;
+  bool  bleConnected;
+  bool  dataValid;
+};
+PrevDisplay prev;
+
 // ===================== BLE 全局变量 =====================
 BLEClient* pClient = nullptr;
 BLERemoteCharacteristic* pWriteChar = nullptr;
@@ -105,10 +128,12 @@ volatile bool newDataReady = false;
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastCommandTime = 0;
 unsigned long lastScanTime = 0;
-const unsigned long DISPLAY_INTERVAL = 1500;
+const unsigned long DISPLAY_INTERVAL = 500;
 const unsigned long COMMAND_INTERVAL = 8000;
 const unsigned long SCAN_INTERVAL = 5000;
 const unsigned long DATA_TIMEOUT = 30000;
+
+bool needFullRedraw = true;
 
 // ===================== CRC 计算 =====================
 uint8_t calcCRC(const uint8_t* data, uint16_t len) {
@@ -209,6 +234,7 @@ void notifyCallback(BLERemoteCharacteristic* pChar,
 class MyClientCallback : public BLEClientCallbacks {
   void onConnect(BLEClient* pclient) {
     bleConnected = true;
+    needFullRedraw = true;
     Serial.println(F("[BLE] 已连接"));
   }
   void onDisconnect(BLEClient* pclient) {
@@ -216,6 +242,7 @@ class MyClientCallback : public BLEClientCallbacks {
     doConnect = false;
     pWriteChar = nullptr;
     pNotifyChar = nullptr;
+    needFullRedraw = true;
     Serial.println(F("[BLE] 已断开"));
   }
 };
@@ -291,26 +318,51 @@ bool connectToBMS() {
   return true;
 }
 
-// ===================== 中文绘制辅助 =====================
-void drawCN(const char* text, int x, int y, uint16_t color) {
-  u8g2.setForegroundColor(color);
-  u8g2.setCursor(x, y);
-  u8g2.print(text);
+// ===================== 中文渲染核心 =====================
+void drawCN(const char* text, int x, int y, uint16_t fgColor, const uint8_t* font) {
+  u8g2CN.setFont(font);
+  u8g2CN.setFontMode(1);
+  u8g2CN.setFontPosTop();
+
+  int textW = u8g2CN.getUTF8Width(text);
+  int textH = u8g2CN.getMaxCharHeight();
+
+  if (textW <= 0 || textH <= 0) return;
+  if (textW > 128) textW = 128;
+  if (textH > 20) textH = 20;
+  if (textW * textH > CN_BUF_MAX_PIXELS) return;
+
+  u8g2CN.clearBuffer();
+  u8g2CN.drawUTF8(0, 0, text);
+
+  uint8_t* buf = u8g2CN.getBufferPtr();
+  int pixelWidth = (int)u8g2CN.getBufferTileWidth() * 8;
+
+  for (int py = 0; py < textH; py++) {
+    for (int px = 0; px < textW; px++) {
+      int byteIdx = (py / 8) * pixelWidth + px;
+      int bit = py % 8;
+      bool isSet = false;
+      if (byteIdx >= 0 && byteIdx < 1024) {
+        isSet = (buf[byteIdx] >> bit) & 1;
+      }
+      cnRgbBuf[py * textW + px] = isSet ? fgColor : CLR_BG;
+    }
+  }
+
+  tft.drawRGBBitmap(x, y, cnRgbBuf, textW, textH);
 }
 
 void drawCN12(const char* text, int x, int y, uint16_t color) {
-  u8g2.setFont(u8g2_font_wqy12_t_chinese3);
-  drawCN(text, x, y, color);
+  drawCN(text, x, y, color, u8g2_font_wqy12_t_chinese3);
 }
 
 void drawCN14(const char* text, int x, int y, uint16_t color) {
-  u8g2.setFont(u8g2_font_wqy14_t_chinese3);
-  drawCN(text, x, y, color);
+  drawCN(text, x, y, color, u8g2_font_wqy14_t_chinese3);
 }
 
 void drawCN16(const char* text, int x, int y, uint16_t color) {
-  u8g2.setFont(u8g2_font_wqy16_t_chinese3);
-  drawCN(text, x, y, color);
+  drawCN(text, x, y, color, u8g2_font_wqy16_t_chinese3);
 }
 
 // ===================== 显示辅助函数 =====================
@@ -333,38 +385,83 @@ uint16_t getPowerBarColor() {
   return CLR_DARK_GRAY;
 }
 
-void drawRoundRect(int x, int y, int w, int h, int r, uint16_t color) {
-  tft.drawFastHLine(x + r, y, w - 2 * r, color);
-  tft.drawFastHLine(x + r, y + h - 1, w - 2 * r, color);
-  tft.drawFastVLine(x, y + r, h - 2 * r, color);
-  tft.drawFastVLine(x + w - 1, y + r, h - 2 * r, color);
-  tft.drawPixel(x + r - 1, y + r - 1, color);
-  tft.drawPixel(x + w - r, y + r - 1, color);
-  tft.drawPixel(x + r - 1, y + h - r, color);
-  tft.drawPixel(x + w - r, y + h - r, color);
-}
-
 void drawProgressBar(int x, int y, int w, int h, int percent, uint16_t fillColor) {
-  tft.fillRect(x, y, w, h, CLR_BAR_BG);
+  tft.fillRect(x + 2, y + 2, w - 4, h - 4, CLR_BAR_BG);
   int fillW = (int)((w - 4) * (float)percent / 100.0f);
   if (fillW > 0) {
     tft.fillRect(x + 2, y + 2, fillW, h - 4, fillColor);
   }
-  drawRoundRect(x, y, w, h, 3, CLR_GRAY);
+  tft.drawFastHLine(x, y, w, CLR_GRAY);
+  tft.drawFastHLine(x, y + h - 1, w, CLR_GRAY);
+  tft.drawFastVLine(x, y, h, CLR_GRAY);
+  tft.drawFastVLine(x + w - 1, y, h, CLR_GRAY);
 }
 
-// ===================== 主界面绘制 =====================
-void drawDashboard() {
-  tft.fillScreen(CLR_BG);
+// 用背景色覆盖后绘制ASCII文本
+void printBg(int x, int y, int w, int h, const char* text, uint8_t size, uint16_t fgColor) {
+  tft.fillRect(x, y, w, h, CLR_BG);
+  tft.setTextSize(size);
+  tft.setTextColor(fgColor);
+  tft.setCursor(x, y);
+  tft.print(text);
+}
 
-  // ---- 顶部标题栏 ----
+// ===================== 变化检测 =====================
+bool dataChanged() {
+  bool changed = false;
+  if (bms.power != prev.power) changed = true;
+  if (bms.voltage != prev.voltage) changed = true;
+  if (bms.current != prev.current) changed = true;
+  if (bms.temp1 != prev.temp1) changed = true;
+  if (bms.soc != prev.soc) changed = true;
+  if (bms.capacity_remain != prev.cap_remain) changed = true;
+  if (bms.capacity_nominal != prev.cap_nominal) changed = true;
+  if (bms.isCharging != prev.isCharging) changed = true;
+  if (bms.isDischarging != prev.isDischarging) changed = true;
+  if (bms.dataValid != prev.dataValid) changed = true;
+  if (bleConnected != prev.bleConnected) changed = true;
+  return changed;
+}
+
+void savePrevData() {
+  prev.power = bms.power;
+  prev.voltage = bms.voltage;
+  prev.current = bms.current;
+  prev.temp1 = bms.temp1;
+  prev.soc = bms.soc;
+  prev.cap_remain = bms.capacity_remain;
+  prev.cap_nominal = bms.capacity_nominal;
+  prev.isCharging = bms.isCharging;
+  prev.isDischarging = bms.isDischarging;
+  prev.dataValid = bms.dataValid;
+  prev.bleConnected = bleConnected;
+}
+
+// ===================== 绘制静态元素 =====================
+void drawStaticElements() {
+  tft.drawFastHLine(0, 32, SCREEN_W, CLR_ACCENT);
+  drawCN12("功率", 10, 42, CLR_GRAY);
+  drawCN12("电池", 10, 128, CLR_GRAY);
+  drawCN12("温度", 10, 240, CLR_CYAN);
+  drawCN12("电压", 130, 240, CLR_YELLOW);
+  drawCN12("电流", 10, 282, CLR_ORANGE);
+  tft.drawFastHLine(10, 122, SCREEN_W - 20, CLR_DARK_GRAY);
+  tft.drawFastHLine(10, 234, SCREEN_W - 20, CLR_DARK_GRAY);
+}
+
+// ===================== 绘制动态元素 =====================
+void drawDynamicElements() {
+  // ---- 标题栏 ----
+  tft.fillRect(8, 4, 160, 14, CLR_BG);
   drawCN12("JK BMS 监控", 8, 4, CLR_DIM_CYAN);
 
+  tft.fillRect(8, 18, 160, 10, CLR_BG);
   tft.setTextSize(1);
   tft.setTextColor(CLR_DARK_GRAY);
   tft.setCursor(8, 20);
   tft.print(BMS_NAME);
 
+  // BLE状态灯
   if (bleConnected) {
     tft.fillCircle(SCREEN_W - 10, 12, 4, CLR_GREEN);
     tft.drawCircle(SCREEN_W - 10, 12, 6, CLR_DIM_GREEN);
@@ -373,15 +470,11 @@ void drawDashboard() {
     tft.drawCircle(SCREEN_W - 10, 12, 6, CLR_DIM_RED);
   }
 
-  tft.drawFastHLine(0, 32, SCREEN_W, CLR_ACCENT);
-
-  // ---- 功率区域 (主视觉) ----
+  // ---- 功率区域 ----
   uint16_t pwrColor = getPowerColor();
   uint16_t pwrBarColor = getPowerBarColor();
 
   tft.fillRect(0, 34, SCREEN_W, 4, pwrBarColor);
-
-  drawCN12("功率", 10, 42, CLR_GRAY);
 
   float absPower = fabs(bms.power);
   char pwrStr[16];
@@ -398,6 +491,7 @@ void drawDashboard() {
     dtostrf(absPower, 1, 2, pwrStr);
   }
 
+  tft.fillRect(10, 56, 220, 36, CLR_BG);
   tft.setTextSize(4);
   tft.setTextColor(pwrColor);
   tft.setCursor(10, 58);
@@ -413,22 +507,20 @@ void drawDashboard() {
   tft.setCursor(unitX, 74);
   tft.print(F("W"));
 
+  // 充放电状态
+  tft.fillRect(10, 98, 180, 18, CLR_BG);
   if (!bms.dataValid) {
-    drawCN14("等待数据...", 10, 100, CLR_GRAY);
+    drawCN14("等待数据...", 10, 98, CLR_GRAY);
   } else if (bms.isCharging) {
-    drawCN14("\xe2\x96\xb2 充电中", 10, 100, CLR_GREEN);
+    drawCN14("\xe2\x96\xb2 充电中", 10, 98, CLR_GREEN);
   } else if (bms.isDischarging) {
-    drawCN14("\xe2\x96\xbc 放电中", 10, 100, CLR_RED);
+    drawCN14("\xe2\x96\xbc 放电中", 10, 98, CLR_RED);
   } else {
-    drawCN14("-- 待机", 10, 100, CLR_GRAY);
+    drawCN14("-- 待机", 10, 98, CLR_GRAY);
   }
-
-  tft.drawFastHLine(10, 122, SCREEN_W - 20, CLR_DARK_GRAY);
 
   // ---- 电池容量区域 ----
   uint16_t socColor = getSocColor(bms.soc);
-
-  drawCN12("电池", 10, 128, CLR_GRAY);
 
   char socStr[8];
   if (bms.dataValid) {
@@ -437,6 +529,7 @@ void drawDashboard() {
     strcpy(socStr, "--%");
   }
 
+  tft.fillRect(10, 142, 200, 48, CLR_BG);
   tft.setTextSize(5);
   tft.setTextColor(CLR_WHITE);
   tft.setCursor(10, 142);
@@ -444,10 +537,10 @@ void drawDashboard() {
 
   drawProgressBar(10, 195, SCREEN_W - 20, 16, bms.dataValid ? bms.soc : 0, socColor);
 
+  tft.fillRect(10, 218, 220, 12, CLR_BG);
   tft.setTextSize(1);
   tft.setTextColor(CLR_GRAY);
   tft.setCursor(10, 218);
-
   if (bms.dataValid) {
     char capStr[32];
     sprintf(capStr, "%.1f / %.1f Ah", bms.capacity_remain, bms.capacity_nominal);
@@ -468,11 +561,8 @@ void drawDashboard() {
     tft.print(usedStr);
   }
 
-  tft.drawFastHLine(10, 234, SCREEN_W - 20, CLR_DARK_GRAY);
-
   // ---- 底部状态区域 ----
-  drawCN12("温度", 10, 240, CLR_CYAN);
-
+  tft.fillRect(10, 256, 110, 22, CLR_BG);
   tft.setTextSize(2);
   tft.setTextColor(CLR_WHITE);
   tft.setCursor(10, 256);
@@ -486,8 +576,7 @@ void drawDashboard() {
     tft.print(F("--"));
   }
 
-  drawCN12("电压", 130, 240, CLR_YELLOW);
-
+  tft.fillRect(130, 256, 110, 22, CLR_BG);
   tft.setTextSize(2);
   tft.setTextColor(CLR_WHITE);
   tft.setCursor(130, 256);
@@ -501,8 +590,7 @@ void drawDashboard() {
     tft.print(F("--"));
   }
 
-  drawCN12("电流", 10, 282, CLR_ORANGE);
-
+  tft.fillRect(10, 298, 110, 22, CLR_BG);
   tft.setTextSize(2);
   tft.setTextColor(CLR_WHITE);
   tft.setCursor(10, 298);
@@ -516,11 +604,30 @@ void drawDashboard() {
     tft.print(F("--"));
   }
 
+  tft.fillRect(130, 298, 100, 14, CLR_BG);
   if (bms.dataValid && (millis() - bms.lastUpdate > DATA_TIMEOUT)) {
     drawCN12("超时!", 160, 298, CLR_RED);
   } else if (bleConnected) {
     drawCN12("在线", 170, 298, CLR_DIM_GREEN);
   }
+}
+
+// ===================== 主界面绘制 =====================
+void drawDashboard() {
+  if (needFullRedraw) {
+    tft.fillScreen(CLR_BG);
+    drawStaticElements();
+    drawDynamicElements();
+    needFullRedraw = false;
+    savePrevData();
+    return;
+  }
+
+  if (!dataChanged() && !newDataReady) return;
+  newDataReady = false;
+
+  drawDynamicElements();
+  savePrevData();
 }
 
 // ===================== 启动画面 =====================
@@ -559,15 +666,19 @@ void setup() {
   bms.isDischarging = false;
   bms.lastUpdate = 0;
 
+  memset(&prev, 0xFF, sizeof(prev));
+  prev.bleConnected = !bleConnected;
+  needFullRedraw = true;
+
   SPI.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
   tft.init(SCREEN_W, SCREEN_H);
   tft.setRotation(0);
   tft.invertDisplay(true);
   tft.fillScreen(CLR_BG);
 
-  u8g2.begin(tft);
-  u8g2.setFontMode(1);
-  u8g2.setFontPosTop();
+  u8g2CN.setFont(u8g2_font_wqy12_t_chinese3);
+  u8g2CN.setFontMode(1);
+  u8g2CN.setFontPosTop();
 
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);
