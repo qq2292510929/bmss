@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#if 1
-
 #define LV_COLOR_DEPTH 16
 
 #define LV_MEM_CUSTOM 0
@@ -21,11 +19,21 @@
 #endif
 
 #define LV_USE_LOG 0
+#define LV_LOG_TRACE_MEM 0
+#define LV_LOG_TRACE_OBJ_CREATE 0
+#define LV_LOG_TRACE_CHG_MODE 0
+#define LV_LOG_TRACE_REFR 0
+#define LV_LOG_TRACE_ADV 0
+#define LV_LOG_TRACE_INDEV 0
 
 #define LV_USE_ASSERT_NULL 0
 #define LV_USE_ASSERT_MALLOC 0
+#define LV_USE_ASSERT_STYLE 0
+#define LV_USE_ASSERT_MEM_INTEGRITY 0
+#define LV_USE_ASSERT_OBJ 0
 
 #define LV_USE_ANIM 1
+#define LV_ANTIALIAS 1
 
 #define LV_FONT_MONTSERRAT_8  0
 #define LV_FONT_MONTSERRAT_10 0
@@ -50,7 +58,6 @@
 #define LV_FONT_MONTSERRAT_48 1
 
 #define LV_FONT_DEFAULT &lv_font_montserrat_14
-
 #define LV_FONT_FMT_TXT_LARGE 0
 #define LV_USE_FONT_COMPRESSED 0
 #define LV_USE_FONT_SUBPX 0
@@ -90,26 +97,8 @@
 #define LV_USE_KEYBOARD 0
 #define LV_USE_LIST 0
 #define LV_USE_METER 0
-#define LV_USE_MSGBOX 0
-#define LV_USE_TEXTAREA 0
-
 #define LV_USE_ANIMIMG 0
 #define LV_USE_CALENDAR 0
-#define LV_USE_CHART 0
-#define LV_USE_KEYBOARD 0
-#define LV_USE_LED 0
-#define LV_USE_LIST 0
-#define LV_USE_METER 0
-#define LV_USE_MSGBOX 0
-#define LV_USE_SPAN 0
-#define LV_USE_SPINBOX 0
-#define LV_USE_SPINNER 0
-#define LV_USE_TABVIEW 0
-#define LV_USE_TILEVIEW 0
-#define LV_USE_WIN 0
-#define LV_USE_MENU 0
-#define LV_USE_COLORWHEEL 0
-#define LV_USE_IMGBTN 0
 
 #define LV_USE_THEME_DEFAULT 1
 #if LV_USE_THEME_DEFAULT
@@ -119,7 +108,6 @@
 #endif
 
 #define LV_USE_THEME_BASIC 1
-
 #define LV_THEME_DEFAULT_INIT lv_theme_default_init
 
 #define LV_USE_FLEX 0
@@ -130,6 +118,18 @@
 #define LV_USE_PERF_MONITOR 0
 #define LV_USE_MEM_MONITOR 0
 
-#endif
+#define LV_USE_FS_STDIO 0
+#define LV_USE_FS_FATFS 0
+#define LV_USE_FS_POSIX 0
+
+#define LV_USE_PNG 0
+#define LV_USE_BMP 0
+#define LV_USE_SJPG 0
+#define LV_USE_GIF 0
+#define LV_USE_QRCODE 0
+#define LV_USE_FREETYPE 0
+
+#define LV_USE_DRAW_BUF_ALIGN 1
+#define LV_USE_DRAW_BUF_STRIDE_ALIGN 1
 
 #endif
