@@ -51,6 +51,7 @@
  */
 
 #define USE_CN_FONT
+#define LV_CONF_INCLUDE_SIMPLE
 
 #include <lvgl.h>
 #include <TFT_eSPI.h>
