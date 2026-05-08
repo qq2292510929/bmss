@@ -8,12 +8,21 @@
  *   - Adafruit GFX Library
  *   - U8g2  (中文字体渲染)
  *   - ESP32 BLE Arduino (随ESP32核心自带)
+ *
+ * 串口命令 (115200 波特率):
+ *   scan      - 扫描并列出所有BLE设备
+ *   connect   - 手动连接目标MAC
+ *   mac XX:XX - 临时修改目标MAC后连接
+ *   status    - 显示当前状态
+ *   data      - 手动请求BMS数据
+ *   restart   - 重启BLE重新扫描
  */
 
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEClient.h>
+#include <BLEScan.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
@@ -28,7 +37,7 @@
 #define TFT_BL    21
 
 // ===================== BLE 配置 =====================
-#define BMS_MAC  "98:DA:20:07:B9:00"
+String targetMAC = "98:DA:20:07:B9:00";
 #define BMS_NAME "JK_BD4A24S10P"
 
 static BLEUUID serviceUUID((uint16_t)0xFFE0);
@@ -134,6 +143,20 @@ const unsigned long DATA_TIMEOUT = 30000;
 
 bool needFullRedraw = true;
 
+// 扫描结果缓存
+#define MAX_SCAN_RESULTS 20
+struct ScanResult {
+  String address;
+  String name;
+  int rssi;
+};
+ScanResult scanResults[MAX_SCAN_RESULTS];
+int scanResultCount = 0;
+bool scanListComplete = false;
+
+// 串口命令缓冲
+String serialBuf = "";
+
 // ===================== CRC =====================
 uint8_t calcCRC(const uint8_t* data, uint16_t len) {
   uint8_t crc = 0;
@@ -182,7 +205,7 @@ void parseCellInfoFrame() {
     bms.capacity_remain, bms.capacity_nominal);
 }
 
-// ===================== BLE 回调 =====================
+// ===================== BLE 通知回调 =====================
 void notifyCallback(BLERemoteCharacteristic*, uint8_t* pData, size_t length, bool) {
   if (length >= 4 && pData[0]==0x55 && pData[1]==0xAA && pData[2]==0xEB && pData[3]==0x90) {
     framePos = 0;
@@ -216,10 +239,24 @@ class MyClientCallback : public BLEClientCallbacks {
   }
 };
 
-class MyScanCallback : public BLEAdvertisedDeviceCallbacks {
+// ===================== 扫描回调(带调试输出) =====================
+class DebugScanCallback : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice dev) {
-    if (dev.getAddress().toString() == BMS_MAC) {
-      Serial.println(F("[BLE] 发现目标BMS!"));
+    String addr = dev.getAddress().toString().c_str();
+    String name = dev.haveName() ? dev.getName().c_str() : "";
+    int rssi = dev.getRSSI();
+
+    Serial.printf("[SCAN] %s  RSSI:%d  Name:%s\n", addr.c_str(), rssi, name.c_str());
+
+    if (scanResultCount < MAX_SCAN_RESULTS) {
+      scanResults[scanResultCount].address = addr;
+      scanResults[scanResultCount].name = name;
+      scanResults[scanResultCount].rssi = rssi;
+      scanResultCount++;
+    }
+
+    if (addr == targetMAC && !bleConnected && !doConnect) {
+      Serial.println(F("[SCAN] >>> 发现目标BMS! <<<"));
       BLEDevice::getScan()->stop();
       if (advDevice) delete advDevice;
       advDevice = new BLEAdvertisedDevice(dev);
@@ -230,21 +267,118 @@ class MyScanCallback : public BLEAdvertisedDeviceCallbacks {
 
 // ===================== 连接BMS =====================
 bool connectToBMS() {
-  Serial.println(F("[BLE] 正在连接..."));
-  if (!advDevice) return false;
+  Serial.printf("[BLE] 正在连接 %s ...\n", targetMAC.c_str());
+  if (!advDevice) {
+    Serial.println(F("[BLE] 错误: 没有扫描到设备!"));
+    return false;
+  }
+
+  if (pClient) {
+    if (pClient->isConnected()) pClient->disconnect();
+    delete pClient;
+    pClient = nullptr;
+  }
 
   pClient = BLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());
   pClient->setConnectionParams(12, 12, 0, 150);
 
+  Serial.println(F("[BLE] 调用 pClient->connect()..."));
   if (!pClient->connect(advDevice)) {
-    Serial.println(F("[BLE] 连接失败!"));
+    Serial.println(F("[BLE] 连接失败! 可能原因:"));
+    Serial.println(F("  1. MAC地址不正确"));
+    Serial.println(F("  2. BMS未开机或蓝牙未开启"));
+    Serial.println(F("  3. BMS正被手机APP占用(请断开APP)"));
+    Serial.println(F("  4. 距离太远(需<5米)"));
+    delete pClient; pClient = nullptr;
+    return false;
+  }
+  Serial.println(F("[BLE] TCP连接成功，正在发现服务..."));
+
+  BLERemoteService* pSvc = pClient->getService(serviceUUID);
+  if (!pSvc) {
+    Serial.printf("[BLE] 未找到服务 0x%04X!\n", (uint16_t)0xFFE0);
+    pClient->disconnect();
+    return false;
+  }
+  Serial.println(F("[BLE] 找到服务 0xFFE0!"));
+
+  pWriteChar = nullptr;
+  pNotifyChar = nullptr;
+  auto* charMap = pSvc->getCharacteristics();
+  for (auto& kv : *charMap) {
+    BLERemoteCharacteristic* c = kv.second;
+    String uuid = c->getUUID().toString().c_str();
+    Serial.printf("[BLE] 特征 UUID:%s  可写:%d 可通知:%d 可读:%d\n",
+      uuid.c_str(), c->canWrite(), c->canNotify(), c->canRead());
+    if (c->canWrite() && !pWriteChar) { pWriteChar = c; }
+    if (c->canNotify() && !pNotifyChar) { pNotifyChar = c; }
+  }
+
+  if (!pNotifyChar) {
+    Serial.println(F("[BLE] 未找到可通知特征!"));
+    pClient->disconnect();
+    return false;
+  }
+
+  Serial.println(F("[BLE] 注册通知回调..."));
+  pNotifyChar->registerForNotify(notifyCallback);
+  if (!pWriteChar && pNotifyChar && pNotifyChar->canWrite()) {
+    pWriteChar = pNotifyChar;
+    Serial.println(F("[BLE] 使用通知特征同时作为写入特征"));
+  }
+
+  if (!pWriteChar) {
+    Serial.println(F("[BLE] 警告: 未找到可写入特征!"));
+  }
+
+  delay(500);
+  Serial.println(F("[BLE] 发送设备信息命令..."));
+  sendBMSCommand(CMD_DEVICE_INFO);
+  delay(500);
+  Serial.println(F("[BLE] 发送电芯数据命令..."));
+  sendBMSCommand(CMD_CELL_INFO);
+
+  lastCommandTime = millis();
+  Serial.println(F("[BLE] 连接流程完成!"));
+  return true;
+}
+
+// ===================== 手动连接(通过MAC字符串) =====================
+bool connectByMAC(String mac) {
+  Serial.printf("[BLE] 手动连接到: %s\n", mac.c_str());
+
+  BLEScan* pScan = BLEDevice::getScan();
+  pScan->stop();
+
+  if (pClient) {
+    if (pClient->isConnected()) pClient->disconnect();
+    delete pClient;
+    pClient = nullptr;
+  }
+
+  pWriteChar = nullptr;
+  pNotifyChar = nullptr;
+  bleConnected = false;
+
+  BLEAddress bleAddr(mac.c_str());
+  pClient = BLEDevice::createClient();
+  pClient->setClientCallbacks(new MyClientCallback());
+  pClient->setConnectionParams(12, 12, 0, 150);
+
+  Serial.printf("[BLE] 直接连接到地址: %s\n", bleAddr.toString().c_str());
+  if (!pClient->connect(bleAddr)) {
+    Serial.println(F("[BLE] 直接连接失败!"));
     delete pClient; pClient = nullptr;
     return false;
   }
 
   BLERemoteService* pSvc = pClient->getService(serviceUUID);
-  if (!pSvc) { pClient->disconnect(); return false; }
+  if (!pSvc) {
+    Serial.println(F("[BLE] 未找到服务 0xFFE0!"));
+    pClient->disconnect();
+    return false;
+  }
 
   auto* charMap = pSvc->getCharacteristics();
   for (auto& kv : *charMap) {
@@ -253,7 +387,11 @@ bool connectToBMS() {
     if (c->canNotify() && !pNotifyChar) pNotifyChar = c;
   }
 
-  if (!pNotifyChar) { pClient->disconnect(); return false; }
+  if (!pNotifyChar) {
+    Serial.println(F("[BLE] 未找到可通知特征!"));
+    pClient->disconnect();
+    return false;
+  }
 
   pNotifyChar->registerForNotify(notifyCallback);
   if (!pWriteChar && pNotifyChar && pNotifyChar->canWrite()) pWriteChar = pNotifyChar;
@@ -263,10 +401,130 @@ bool connectToBMS() {
   delay(500);
   sendBMSCommand(CMD_CELL_INFO);
   lastCommandTime = millis();
+  Serial.println(F("[BLE] 手动连接成功!"));
   return true;
 }
 
-// ===================== 中文渲染核心(修复裁切) =====================
+// ===================== 串口命令处理 =====================
+void handleSerialCommand(String cmd) {
+  cmd.trim();
+  cmd.toLowerCase();
+  Serial.printf("[CMD] 收到命令: %s\n", cmd.c_str());
+
+  if (cmd == "scan") {
+    Serial.println(F("=============================="));
+    Serial.println(F("[SCAN] 开始扫描BLE设备 (10秒)..."));
+    Serial.println(F("=============================="));
+    scanResultCount = 0;
+    scanListComplete = false;
+    BLEScan* pScan = BLEDevice::getScan();
+    pScan->setActiveScan(true);
+    pScan->setInterval(100);
+    pScan->setWindow(99);
+    pScan->start(10, true);
+    scanListComplete = true;
+
+    Serial.println(F("=============================="));
+    Serial.printf("[SCAN] 扫描完成! 发现 %d 个设备:\n", scanResultCount);
+    Serial.println(F("=============================="));
+    for (int i = 0; i < scanResultCount; i++) {
+      Serial.printf("  [%d] MAC:%s  RSSI:%d  Name:%s",
+        i, scanResults[i].address.c_str(),
+        scanResults[i].rssi, scanResults[i].name.c_str());
+      if (scanResults[i].address == targetMAC) {
+        Serial.print(F("  <<< 目标MAC!"));
+      }
+      if (scanResults[i].name.indexOf("JK") >= 0) {
+        Serial.print(F("  <<< JK BMS!"));
+      }
+      Serial.println();
+    }
+    Serial.println(F("=============================="));
+    Serial.printf("[SCAN] 当前目标MAC: %s\n", targetMAC.c_str());
+    Serial.println(F("[CMD] 使用 connect 连接目标MAC"));
+    Serial.println(F("[CMD] 使用 mac XX:XX:XX:XX:XX:XX 修改目标MAC"));
+
+  } else if (cmd == "connect") {
+    Serial.printf("[CMD] 尝试连接目标MAC: %s\n", targetMAC.c_str());
+    if (bleConnected) {
+      Serial.println(F("[CMD] 已连接! 先断开..."));
+      if (pClient) pClient->disconnect();
+      delay(1000);
+    }
+    bool ok = connectByMAC(targetMAC);
+    if (ok) Serial.println(F("[CMD] 连接成功!"));
+    else Serial.println(F("[CMD] 连接失败!"));
+
+  } else if (cmd.startsWith("mac ")) {
+    String newMac = cmd.substring(4);
+    newMac.trim();
+    newMac.toUpperCase();
+    if (newMac.length() == 17) {
+      targetMAC = newMac;
+      Serial.printf("[CMD] 目标MAC已更新为: %s\n", targetMAC.c_str());
+      Serial.println(F("[CMD] 发送 connect 来连接新MAC"));
+    } else {
+      Serial.println(F("[CMD] MAC格式错误! 正确格式: XX:XX:XX:XX:XX:XX"));
+    }
+
+  } else if (cmd == "status") {
+    Serial.println(F("=============================="));
+    Serial.printf("[状态] BLE连接: %s\n", bleConnected ? "已连接" : "未连接");
+    Serial.printf("[状态] 目标MAC: %s\n", targetMAC.c_str());
+    Serial.printf("[状态] 数据有效: %s\n", bms.dataValid ? "是" : "否");
+    if (bms.dataValid) {
+      Serial.printf("[状态] 电压: %.2f V\n", bms.voltage);
+      Serial.printf("[状态] 功率: %.1f W\n", bms.power);
+      Serial.printf("[状态] 电流: %.2f A\n", bms.current);
+      Serial.printf("[状态] SOC: %d%%\n", bms.soc);
+      Serial.printf("[状态] 温度: %.1f C\n", bms.temp1);
+      Serial.printf("[状态] 容量: %.1f / %.1f Ah\n", bms.capacity_remain, bms.capacity_nominal);
+    }
+    Serial.printf("[状态] 空闲内存: %d bytes\n", ESP.getFreeHeap());
+    Serial.println(F("=============================="));
+
+  } else if (cmd == "data") {
+    if (bleConnected) {
+      Serial.println(F("[CMD] 手动请求BMS数据..."));
+      sendBMSCommand(CMD_CELL_INFO);
+    } else {
+      Serial.println(F("[CMD] 未连接BMS! 先用 connect 连接"));
+    }
+
+  } else if (cmd == "restart") {
+    Serial.println(F("[CMD] 重启BLE..."));
+    if (pClient) {
+      if (pClient->isConnected()) pClient->disconnect();
+      delete pClient; pClient = nullptr;
+    }
+    pWriteChar = nullptr;
+    pNotifyChar = nullptr;
+    bleConnected = false;
+    doConnect = false;
+    advDevice = nullptr;
+    needFullRedraw = true;
+    delay(500);
+    BLEDevice::getScan()->start(30, false);
+    Serial.println(F("[CMD] BLE已重启，开始扫描..."));
+
+  } else if (cmd == "help") {
+    Serial.println(F("=============================="));
+    Serial.println(F("串口命令列表:"));
+    Serial.println(F("  scan      - 扫描所有BLE设备"));
+    Serial.println(F("  connect   - 连接目标MAC"));
+    Serial.println(F("  mac XX:XX - 修改目标MAC"));
+    Serial.println(F("  status    - 查看当前状态"));
+    Serial.println(F("  data      - 手动请求数据"));
+    Serial.println(F("  restart   - 重启BLE"));
+    Serial.println(F("  help      - 显示帮助"));
+    Serial.println(F("=============================="));
+
+  } else {
+    Serial.printf("[CMD] 未知命令: %s (输入 help 查看帮助)\n", cmd.c_str());
+  }
+}
+
+// ===================== 中文渲染核心 =====================
 void drawCN(const char* text, int x, int y, uint16_t fgColor, const uint8_t* font) {
   u8g2CN.setFont(font);
   u8g2CN.setFontMode(1);
@@ -320,20 +578,17 @@ uint16_t socColor(int s) {
   if (s > 15) return C_ORANGE;
   return C_RED;
 }
-
 uint16_t socGlow(int s) {
   if (s > 60) return C_GLOW_G;
   if (s > 30) return C_GLOW_Y;
   if (s > 15) return C_ORANGE;
   return C_GLOW_R;
 }
-
 uint16_t pwrColor() {
   if (bms.isCharging) return C_GREEN;
   if (bms.isDischarging) return C_RED;
   return C_GRAY;
 }
-
 uint16_t pwrGlow() {
   if (bms.isCharging) return C_GLOW_G;
   if (bms.isDischarging) return C_GLOW_R;
@@ -388,21 +643,15 @@ void savePrev() {
 // ===================== 静态元素 =====================
 void drawStatic() {
   drawAccentLine(HDR_H, C_ACCENT);
-
   drawCornerMarks(2, PWR_Y, SW - 4, PWR_H, C_DGRAY);
   tft.drawFastVLine(6, PWR_Y + 2, 2, pwrGlow());
-
   drawCornerMarks(2, BAT_Y, SW - 4, BAT_H, C_DGRAY);
   tft.drawFastVLine(6, BAT_Y + 2, 2, socGlow(bms.soc));
-
   drawCornerMarks(2, BOT_Y, SW - 4, BOT_H, C_DGRAY);
-
   drawCN12("功率", 10, PWR_Y + 6, C_GRAY);
   drawCN12("电池", 10, BAT_Y + 6, C_GRAY);
-
   tft.drawFastVLine(78, BOT_Y + 6, BOT_H - 12, C_DGRAY);
   tft.drawFastVLine(158, BOT_Y + 6, BOT_H - 12, C_DGRAY);
-
   drawCN12("温度", 14, BOT_Y + 6, C_CYAN);
   drawCN12("电压", 90, BOT_Y + 6, C_YELLOW);
   drawCN12("电流", 168, BOT_Y + 6, C_ORANGE);
@@ -410,7 +659,6 @@ void drawStatic() {
 
 // ===================== 动态元素 =====================
 void drawDynamic() {
-  // ---- 标题栏 ----
   tft.fillRect(8, 4, 170, 14, C_BG);
   drawCN14("JK BMS 监控", 8, 4, C_DCYAN);
 
@@ -431,10 +679,8 @@ void drawDynamic() {
     tft.drawCircle(SW - 12, 14, r, C_DRED);
   }
 
-  // ---- 功率区域 ----
   uint16_t pc = pwrColor();
   uint16_t pg = pwrGlow();
-
   tft.fillRect(0, PWR_Y, SW, 2, pg);
 
   float absP = fabs(bms.power);
@@ -460,23 +706,16 @@ void drawDynamic() {
   tft.print(F("W"));
 
   tft.fillRect(10, PWR_Y + 66, 180, 18, C_BG);
-  if (!bms.dataValid) {
-    drawCN14("等待数据...", 10, PWR_Y + 66, C_GRAY);
-  } else if (bms.isCharging) {
-    drawCN14("\xe2\x96\xb2 充电中", 10, PWR_Y + 66, C_GREEN);
-  } else if (bms.isDischarging) {
-    drawCN14("\xe2\x96\xbc 放电中", 10, PWR_Y + 66, C_RED);
-  } else {
-    drawCN14("-- 待机", 10, PWR_Y + 66, C_GRAY);
-  }
+  if (!bms.dataValid) drawCN14("等待数据...", 10, PWR_Y + 66, C_GRAY);
+  else if (bms.isCharging) drawCN14("\xe2\x96\xb2 充电中", 10, PWR_Y + 66, C_GREEN);
+  else if (bms.isDischarging) drawCN14("\xe2\x96\xbc 放电中", 10, PWR_Y + 66, C_RED);
+  else drawCN14("-- 待机", 10, PWR_Y + 66, C_GRAY);
 
   int pwrPct = bms.dataValid ? constrain((int)(absP / 30.0 * 100), 0, 100) : 0;
   drawGlowBar(10, PWR_Y + 86, SW - 20, 8, pwrPct, pc, pg);
 
-  // ---- 电池区域 ----
   uint16_t sc = socColor(bms.soc);
   uint16_t sg = socGlow(bms.soc);
-
   char ss[8];
   if (bms.dataValid) sprintf(ss, "%d%%", bms.soc);
   else strcpy(ss, "--%");
@@ -502,9 +741,7 @@ void drawDynamic() {
     char cs[32];
     sprintf(cs, "%.1f / %.1f Ah", bms.capacity_remain, bms.capacity_nominal);
     tft.print(cs);
-  } else {
-    tft.print(F("--- / --- Ah"));
-  }
+  } else tft.print(F("--- / --- Ah"));
 
   float used = bms.capacity_nominal - bms.capacity_remain;
   if (bms.dataValid && used > 0) {
@@ -517,17 +754,13 @@ void drawDynamic() {
     tft.print(us);
   }
 
-  // ---- 底部区域 ----
   tft.fillRect(8, BOT_Y + 22, 66, 38, C_BG);
   tft.setTextSize(2);
   tft.setTextColor(C_WHITE);
   tft.setCursor(10, BOT_Y + 26);
   if (bms.dataValid) {
-    char ts[10];
-    dtostrf(bms.temp1, 1, 1, ts);
-    tft.print(ts);
-    tft.setTextSize(1);
-    tft.print(F("C"));
+    char ts[10]; dtostrf(bms.temp1, 1, 1, ts);
+    tft.print(ts); tft.setTextSize(1); tft.print(F("C"));
   } else tft.print(F("--"));
 
   tft.fillRect(84, BOT_Y + 22, 66, 38, C_BG);
@@ -535,11 +768,8 @@ void drawDynamic() {
   tft.setTextColor(C_WHITE);
   tft.setCursor(86, BOT_Y + 26);
   if (bms.dataValid) {
-    char vs[10];
-    dtostrf(bms.voltage, 1, 1, vs);
-    tft.print(vs);
-    tft.setTextSize(1);
-    tft.print(F("V"));
+    char vs[10]; dtostrf(bms.voltage, 1, 1, vs);
+    tft.print(vs); tft.setTextSize(1); tft.print(F("V"));
   } else tft.print(F("--"));
 
   tft.fillRect(162, BOT_Y + 22, 72, 38, C_BG);
@@ -547,19 +777,15 @@ void drawDynamic() {
   tft.setTextColor(C_WHITE);
   tft.setCursor(164, BOT_Y + 26);
   if (bms.dataValid) {
-    char is[10];
-    dtostrf(bms.current, 1, 2, is);
-    tft.print(is);
-    tft.setTextSize(1);
-    tft.print(F("A"));
+    char is2[10]; dtostrf(bms.current, 1, 2, is2);
+    tft.print(is2); tft.setTextSize(1); tft.print(F("A"));
   } else tft.print(F("--"));
 
   tft.fillRect(162, BOT_Y + 50, 72, 12, C_BG);
-  if (bms.dataValid && (millis() - bms.lastUpdate > DATA_TIMEOUT)) {
+  if (bms.dataValid && (millis() - bms.lastUpdate > DATA_TIMEOUT))
     drawCN12("超时!", 180, BOT_Y + 50, C_RED);
-  } else if (bleConnected) {
+  else if (bleConnected)
     drawCN12("在线", 186, BOT_Y + 50, C_DGREEN);
-  }
 }
 
 // ===================== 主绘制 =====================
@@ -581,7 +807,6 @@ void drawDashboard() {
 // ===================== 启动画面 =====================
 void drawSplash() {
   tft.fillScreen(C_BG);
-
   for (int i = 0; i < 3; i++) {
     int y = 80 + i * 4;
     tft.drawFastHLine(30 + i * 8, y, SW - 60 - i * 16, C_ACCENT);
@@ -590,24 +815,24 @@ void drawSplash() {
     int y = 220 + i * 4;
     tft.drawFastHLine(30 + i * 8, y, SW - 60 - i * 16, C_ACCENT);
   }
-
   drawCN16("JK BMS", 60, 96, C_CYAN);
   drawCN14("蓝牙监控仪表盘", 35, 126, C_GRAY);
-
   tft.setTextSize(1);
   tft.setTextColor(C_DCYAN);
   tft.setCursor(50, 156);
   tft.print(BMS_NAME);
-
   drawCN12("扫描中...", 76, 186, C_GRAY);
-
   drawCornerMarks(20, 74, SW - 40, 160, C_DGRAY);
 }
 
 // ===================== SETUP =====================
 void setup() {
   Serial.begin(115200);
-  Serial.println(F("[系统] 启动中..."));
+  Serial.println(F(""));
+  Serial.println(F("================================"));
+  Serial.println(F("  JK BMS 蓝牙监控仪表盘"));
+  Serial.println(F("  输入 help 查看串口命令"));
+  Serial.println(F("================================"));
 
   bms = {0};
   bms.dataValid = false;
@@ -631,18 +856,36 @@ void setup() {
   drawSplash();
   delay(1000);
 
+  Serial.printf("[系统] 目标MAC: %s\n", targetMAC.c_str());
+  Serial.println(F("[系统] 启动BLE扫描..."));
+
   BLEDevice::init("");
   BLEScan* pScan = BLEDevice::getScan();
-  pScan->setAdvertisedDeviceCallbacks(new MyScanCallback());
+  pScan->setAdvertisedDeviceCallbacks(new DebugScanCallback());
   pScan->setActiveScan(true);
   pScan->setInterval(100);
   pScan->setWindow(99);
   pScan->start(30, false);
-  Serial.println(F("[系统] BLE扫描已启动"));
+
+  Serial.println(F("[系统] BLE扫描已启动 (每个设备都会打印)"));
 }
 
 // ===================== LOOP =====================
 void loop() {
+  // 串口命令处理
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (serialBuf.length() > 0) {
+        handleSerialCommand(serialBuf);
+        serialBuf = "";
+      }
+    } else {
+      serialBuf += c;
+      if (serialBuf.length() > 60) serialBuf = "";
+    }
+  }
+
   if (doConnect) {
     doConnect = false;
     if (connectToBMS()) Serial.println(F("[系统] BMS连接成功!"));
