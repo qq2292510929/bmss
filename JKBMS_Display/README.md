@@ -12,19 +12,19 @@
 
 ## 接线说明
 
-### ESP32-32E 与 ST7789 显示屏连接
+### ESP32-32E 与 ST7789 显示屏连接 (官方引脚分配)
 
 | ST7789引脚 | ESP32引脚 | 说明 |
 |------------|-----------|------|
 | VCC | 3.3V | 电源正 |
 | GND | GND | 电源负 |
-| CS | GPIO5 | 片选 |
-| DC | GPIO16 | 数据/命令 |
-| RST | GPIO17 | 复位 |
-| MOSI | GPIO23 | SPI数据 |
-| SCK | GPIO18 | SPI时钟 |
-| LED | 3.3V | 背光 (可接PWM调光) |
-| MISO | GPIO19 | SPI读取 (可选) |
+| CS | GPIO15 | 片选 (TFT_CS) |
+| DC/RS | GPIO2 | 数据/命令选择 (TFT_RS) |
+| RST | EN | 复位 (与开发板复位共享) |
+| MOSI | GPIO13 | SPI数据 (TFT_MOSI) |
+| SCK | GPIO14 | SPI时钟 (TFT_SCK) |
+| MISO | GPIO12 | SPI读取 (TFT_MISO) |
+| BL | GPIO21 | 背光控制 (高电平亮) |
 
 ## 软件依赖
 
@@ -63,12 +63,13 @@
 #define ST7789_DRIVER
 #define TFT_WIDTH 240
 #define TFT_HEIGHT 320
-#define TFT_MISO 19
-#define TFT_MOSI 23
-#define TFT_SCLK 18
-#define TFT_CS   5
-#define TFT_DC   16
-#define TFT_RST  17
+#define TFT_MISO 12
+#define TFT_MOSI 13
+#define TFT_SCLK 14
+#define TFT_CS   15
+#define TFT_DC   2
+#define TFT_RST  -1   // EN引脚自动处理
+#define TFT_BL   21   // 背光控制
 #define SPI_FREQUENCY 40000000
 ```
 

@@ -1,22 +1,24 @@
 /*
   JKBMS Bluetooth Monitor for ESP32-32E + ST7789 2.8" Display
-  
+
   功能：通过蓝牙连接JKBMS，解析电池数据并显示到ST7789屏幕
   硬件：ESP32-32E + 2.8寸 ST7789P3 显示屏 (240x320)
   BMS: JK_BD4A24S10P
-  
+
   库依赖：
   - NimBLE-Arduino (by h2zero)
   - TFT_eSPI (by Bodmer)
-  
-  接线说明 (ST7789):
-  - CS   -> GPIO5
-  - DC   -> GPIO16
-  - RST  -> GPIO17
-  - MOSI -> GPIO23
-  - SCK  -> GPIO18
-  - LED  -> 3.3V (或PWM控制)
-  - MISO -> GPIO19 (可选)
+
+  接线说明 (ESP32-32E 官方引脚分配):
+  - CS   -> GPIO15  (TFT_CS)
+  - DC   -> GPIO2   (TFT_RS)
+  - RST  -> EN      (与开发板复位共享)
+  - MOSI -> GPIO13  (TFT_MOSI)
+  - SCK  -> GPIO14  (TFT_SCK)
+  - MISO -> GPIO12  (TFT_MISO)
+  - BL   -> GPIO21  (TFT_BL, 背光控制)
+  - VCC  -> 3.3V
+  - GND  -> GND
 */
 
 #include <Arduino.h>
