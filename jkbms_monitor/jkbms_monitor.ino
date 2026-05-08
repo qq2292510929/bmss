@@ -19,13 +19,13 @@
 #include <SPI.h>
 
 // ===================== 引脚配置 =====================
-// ST7789 显示屏引脚 (根据你的实际接线修改)
-#define TFT_CS    5
-#define TFT_DC    2
-#define TFT_RST   4
-#define TFT_SCLK  18
-#define TFT_MOSI  23
-#define TFT_BL    15
+// ESP32-32E 开发板自带 LCD 引脚配置
+#define TFT_CS    15  // TFT_CS → IO15
+#define TFT_DC    2   // TFT_RS → IO2
+#define TFT_RST   -1  // EN共享引脚，无需软件控制
+#define TFT_SCLK  14  // TFT_SCK → IO14
+#define TFT_MOSI  13  // TFT_MOSI → IO13
+#define TFT_BL    21  // TFT_BL → IO21
 
 // ===================== BLE 配置 =====================
 #define BMS_MAC  "98:DA:20:07:B9:00"
