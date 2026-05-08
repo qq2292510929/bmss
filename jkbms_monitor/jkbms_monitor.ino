@@ -282,17 +282,33 @@ bool connectToBMS() {
   pClient = BLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());
 
-  Serial.println(F("[BLE] 调用 pClient->connect()..."));
-  if (!pClient->connect(advDevice)) {
+  Serial.println(F("[BLE] 尝试连接(带绑定)..."));
+  
+  bool connected = false;
+  for (int retry = 0; retry < 3; retry++) {
+    if (retry > 0) {
+      Serial.printf("[BLE] 重试连接... (%d/3)\n", retry + 1);
+      delay(500);
+    }
+    
+    if (pClient->connect(advDevice, BLE_ADDR_TYPE_RANDOM)) {
+      connected = true;
+      break;
+    }
+    delay(1000);
+  }
+  
+  if (!connected) {
     Serial.println(F("[BLE] 连接失败! 可能原因:"));
     Serial.println(F("  1. MAC地址不正确"));
     Serial.println(F("  2. BMS未开机或蓝牙未开启"));
     Serial.println(F("  3. BMS正被手机APP占用(请断开APP)"));
     Serial.println(F("  4. 距离太远(需<5米)"));
+    Serial.println(F("  5. 需要在BMS设置中启用蓝牙绑定"));
     delete pClient; pClient = nullptr;
     return false;
   }
-  Serial.println(F("[BLE] TCP连接成功，正在发现服务..."));
+  Serial.println(F("[BLE] 连接成功!"));
 
   BLERemoteService* pSvc = pClient->getService(serviceUUID);
   if (!pSvc) {
@@ -365,7 +381,22 @@ bool connectByMAC(String mac) {
   pClient->setClientCallbacks(new MyClientCallback());
 
   Serial.printf("[BLE] 直接连接到地址: %s\n", bleAddr.toString().c_str());
-  if (!pClient->connect(bleAddr)) {
+  
+  bool connected = false;
+  for (int retry = 0; retry < 3; retry++) {
+    if (retry > 0) {
+      Serial.printf("[BLE] 重试连接... (%d/3)\n", retry + 1);
+      delay(500);
+    }
+    
+    if (pClient->connect(bleAddr, BLE_ADDR_TYPE_RANDOM)) {
+      connected = true;
+      break;
+    }
+    delay(1000);
+  }
+  
+  if (!connected) {
     Serial.println(F("[BLE] 直接连接失败!"));
     delete pClient; pClient = nullptr;
     return false;
