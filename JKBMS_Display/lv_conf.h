@@ -64,7 +64,7 @@
 #define LV_USE_CANVAS 0
 #define LV_USE_CHECKBOX 0
 #define LV_USE_DROPDOWN 0
-#define LV_USE_IMG 0
+#define LV_USE_IMG 1
 #define LV_USE_LABEL 1
 #define LV_LABEL_TEXT_SELECTION 0
 #define LV_LABEL_LONG_TXT_HINT 0
@@ -85,6 +85,31 @@
 #define LV_USE_TILEVIEW 0
 #define LV_USE_WIN 0
 #define LV_USE_MENU 0
+#define LV_USE_COLORWHEEL 0
+#define LV_USE_IMGBTN 0
+#define LV_USE_KEYBOARD 0
+#define LV_USE_LIST 0
+#define LV_USE_METER 0
+#define LV_USE_MSGBOX 0
+#define LV_USE_TEXTAREA 0
+
+#define LV_USE_ANIMIMG 0
+#define LV_USE_CALENDAR 0
+#define LV_USE_CHART 0
+#define LV_USE_KEYBOARD 0
+#define LV_USE_LED 0
+#define LV_USE_LIST 0
+#define LV_USE_METER 0
+#define LV_USE_MSGBOX 0
+#define LV_USE_SPAN 0
+#define LV_USE_SPINBOX 0
+#define LV_USE_SPINNER 0
+#define LV_USE_TABVIEW 0
+#define LV_USE_TILEVIEW 0
+#define LV_USE_WIN 0
+#define LV_USE_MENU 0
+#define LV_USE_COLORWHEEL 0
+#define LV_USE_IMGBTN 0
 
 #define LV_USE_THEME_DEFAULT 1
 #if LV_USE_THEME_DEFAULT
