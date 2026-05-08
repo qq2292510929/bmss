@@ -10,7 +10,7 @@
  *    - BLE MAC: 98:da:20:07:b9:00
  *
  *  Libraries (install via Arduino Library Manager):
- *    - TFT_eSPI by Bodmer
+ *    - TFT_eSPI by Bodmer (v2.4.79 for ESP32 Core 2.x)
  *    - LVGL v8.3.x by kisvegabor
  *    - ESP32 BLE Arduino (built-in with ESP32 core)
  *
@@ -32,7 +32,7 @@
  *    #define TFT_SCLK 14
  *    #define TFT_CS   15
  *    #define TFT_DC   2
- *    #define TFT_RST  -1  // 使用共享复位引脚EN
+ *    #define TFT_RST  -1
  *    #define TFT_BL   21
  *    #define LOAD_GLCD
  *    #define LOAD_FONT2
@@ -58,7 +58,6 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEClient.h>
-#include "BLEScan.h"
 
 #ifdef USE_CN_FONT
 LV_FONT_DECLARE(cn_font_16);
@@ -69,9 +68,6 @@ LV_FONT_DECLARE(cn_font_16);
 
 #define JKBMS_MAC  "98:da:20:07:b9:00"
 #define JKBMS_NAME "JK_BD4A24S10P"
-
-#define BLE_SERVICE_UUID        "0000ffe0-0000-1000-8000-00805f9b34fb"
-#define BLE_CHAR_WRITE_UUID     "0000ffe1-0000-1000-8000-00805f9b34fb"
 
 #define CMD_CELL_INFO   0x96
 #define CMD_DEVICE_INFO 0x97
@@ -291,19 +287,19 @@ static bool connectBMS() {
         return false;
     }
 
-    auto charMap = pSvc->getCharacteristics();
+    std::map<std::string, BLERemoteCharacteristic*>* charMap = pSvc->getCharacteristics();
     pWriteChar = nullptr;
     pNotifyChar = nullptr;
 
     for (auto& kv : *charMap) {
         BLERemoteCharacteristic* c = kv.second;
-        uint8_t props = c->getProperties();
-        Serial.printf("  Char handle=0x%04X props=0x%02X\n", kv.first, props);
+        Serial.printf("  Char UUID=%s handle=0x%04X\n",
+            c->getUUID().toString().c_str(), c->getHandle());
 
-        if ((props & BLE_CHAR_PROP_WRITE) || (props & BLE_CHAR_PROP_WRITE_NR)) {
+        if (c->canWrite() || c->canWriteNoResponse()) {
             if (!pWriteChar) pWriteChar = c;
         }
-        if ((props & BLE_CHAR_PROP_NOTIFY) || (props & BLE_CHAR_PROP_INDICATE)) {
+        if (c->canNotify() || c->canIndicate()) {
             if (!pNotifyChar) pNotifyChar = c;
         }
     }
@@ -322,6 +318,9 @@ static bool connectBMS() {
         pClient->disconnect();
         return false;
     }
+
+    Serial.printf("WriteChar handle=0x%04X NotifyChar handle=0x%04X\n",
+        pWriteChar->getHandle(), pNotifyChar->getHandle());
 
     Serial.println("Registering notifications...");
     pNotifyChar->registerForNotify(notifyCB, true);
