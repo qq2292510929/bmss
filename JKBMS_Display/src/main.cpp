@@ -123,9 +123,9 @@ struct BMSData {
 BMSData bmsData;
 
 // ===================== BLE相关 =====================
-static BLEClient* pClient = nullptr;
-static BLERemoteCharacteristic* pRemoteCharacteristic = nullptr;
-static BLEAdvertisedDevice* myDevice = nullptr;
+static NimBLEClient* pClient = nullptr;
+static NimBLERemoteCharacteristic* pRemoteCharacteristic = nullptr;
+static NimBLEAdvertisedDevice* myDevice = nullptr;
 
 bool doConnect = false;
 bool connected = false;
@@ -158,14 +158,14 @@ unsigned long lastNotifyTime = 0;
 #define AREA_STATUS_H 60
 
 // ===================== 类定义 =====================
-class MyClientCallback : public BLEClientCallbacks {
-  void onConnect(BLEClient* pclient) {
+class MyClientCallback : public NimBLEClientCallbacks {
+  void onConnect(NimBLEClient* pclient) {
     connected = true;
     bmsData.connected = true;
     DEBUG_PRINTLN("BLE Connected");
   }
 
-  void onDisconnect(BLEClient* pclient) {
+  void onDisconnect(NimBLEClient* pclient) {
     connected = false;
     bmsData.connected = false;
     doConnect = false;
@@ -173,17 +173,17 @@ class MyClientCallback : public BLEClientCallbacks {
   }
 };
 
-class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-  void onResult(BLEAdvertisedDevice advertisedDevice) {
-    DEBUG_PRINTF("Found device: %s\n", advertisedDevice.toString().c_str());
+class MyAdvertisedDeviceCallbacks: public NimBLEAdvertisedDeviceCallbacks {
+  void onResult(NimBLEAdvertisedDevice* advertisedDevice) {
+    DEBUG_PRINTF("Found device: %s\n", advertisedDevice->toString().c_str());
     
-    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(BLEUUID(SERVICE_UUID))) {
+    if (advertisedDevice->haveServiceUUID() && advertisedDevice->isAdvertisingService(BLEUUID(SERVICE_UUID))) {
       DEBUG_PRINTLN("Found JKBMS service!");
       
-      if (advertisedDevice.getAddress().toString() == BMS_MAC_ADDRESS) {
+      if (advertisedDevice->getAddress().toString() == BMS_MAC_ADDRESS) {
         DEBUG_PRINTLN("MAC address matched!");
         BLEDevice::getScan()->stop();
-        myDevice = new BLEAdvertisedDevice(advertisedDevice);
+        myDevice = new NimBLEAdvertisedDevice(*advertisedDevice);
         doConnect = true;
       }
     }
@@ -203,16 +203,11 @@ uint8_t calculateCRC(const uint8_t data[], uint16_t len) {
 void sendCommand(uint8_t cmd) {
   if (!pRemoteCharacteristic) return;
   
-  uint8_t frame[20] = {
-    0xAA, 0x55, 0x90, 0xEB,  // Header
-    cmd,                       // Command
-    0x00,                      // Length
-    0x00, 0x00, 0x00, 0x00,    // Value
-    0x00, 0x00, 0x00, 0x00,    // Padding
-    0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00,
-    0x00                       // CRC placeholder
-  };
+  uint8_t frame[20] = {0};
+  frame[0] = 0xAA; frame[1] = 0x55; frame[2] = 0x90; frame[3] = 0xEB;
+  frame[4] = cmd;
+  frame[5] = 0x00;
+  frame[6] = 0x00; frame[7] = 0x00; frame[8] = 0x00; frame[9] = 0x00;
   
   frame[19] = calculateCRC(frame, 19);
   
@@ -221,7 +216,7 @@ void sendCommand(uint8_t cmd) {
 }
 
 // ===================== 通知回调 =====================
-static void notifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic,
+static void notifyCallback(NimBLERemoteCharacteristic* pBLERemoteCharacteristic,
                           uint8_t* pData, size_t length, bool isNotify) {
   
   for (size_t i = 0; i < length; i++) {
@@ -429,7 +424,7 @@ void processFrame() {
 bool connectToServer() {
   DEBUG_PRINT("Connecting to BMS...");
   
-  pClient = BLEDevice::createClient();
+  pClient = NimBLEDevice::createClient();
   pClient->setClientCallbacks(new MyClientCallback());
   
   if (!pClient->connect(myDevice)) {
@@ -439,7 +434,7 @@ bool connectToServer() {
   
   DEBUG_PRINTLN(" Connected!");
   
-  BLERemoteService* pRemoteService = pClient->getService(SERVICE_UUID);
+  NimBLERemoteService* pRemoteService = pClient->getService(SERVICE_UUID);
   if (!pRemoteService) {
     DEBUG_PRINTLN("Service not found!");
     pClient->disconnect();
@@ -454,7 +449,7 @@ bool connectToServer() {
   }
   
   if (pRemoteCharacteristic->canNotify()) {
-    pRemoteCharacteristic->registerForNotify(notifyCallback);
+    pRemoteCharacteristic->subscribe(true, notifyCallback);
     DEBUG_PRINTLN("Notifications registered");
   }
   
@@ -882,8 +877,7 @@ void setup() {
   DEBUG_PRINTLN("Init BLE...");
   BLEDevice::init("JKBMS-Monitor");
   
-  // 开始扫描
-  BLEScan* pBLEScan = BLEDevice::getScan();
+  NimBLEScan* pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setInterval(1349);
   pBLEScan->setWindow(449);
