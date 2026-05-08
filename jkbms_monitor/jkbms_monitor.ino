@@ -130,8 +130,8 @@ BLEAdvertisedDevice* advDevice = nullptr;
 
 uint8_t frameBuf[MAX_FRAME_SIZE];
 int framePos = 0;
-bool frameStarted = false;
 volatile bool newDataReady = false;
+bool lastFrameWasCellInfo = false;
 
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastCommandTime = 0;
@@ -173,53 +173,114 @@ void sendBMSCommand(uint8_t cmd) {
 }
 
 // ===================== 解析JK02_32S帧 =====================
-void parseCellInfoFrame() {
-  if (framePos < MIN_FRAME_SIZE) return;
-  if (calcCRC(frameBuf, framePos - 1) != frameBuf[framePos - 1]) return;
-  if (frameBuf[4] != FRAME_TYPE_CELL_INFO) return;
+void hexDump(const uint8_t* data, int start, int len) {
+  for (int i = 0; i < len; i++) {
+    if (i > 0) Serial.print(F("."));
+    if (data[start + i] < 0x10) Serial.print(F("0"));
+    Serial.print(data[start + i], HEX);
+  }
+}
 
-  bms.voltage = ((uint32_t)frameBuf[121]<<24|(uint32_t)frameBuf[120]<<16|
-                 (uint32_t)frameBuf[119]<<8|(uint32_t)frameBuf[118]) * 0.001f;
-  bms.power = ((uint32_t)frameBuf[125]<<24|(uint32_t)frameBuf[124]<<16|
-               (uint32_t)frameBuf[123]<<8|(uint32_t)frameBuf[122]) * 0.001f;
-  int32_t rawI = (int32_t)((uint32_t)frameBuf[129]<<24|(uint32_t)frameBuf[128]<<16|
-               (uint32_t)frameBuf[127]<<8|(uint32_t)frameBuf[126]);
-  bms.current = rawI * 0.001f;
-  int16_t rT1 = (int16_t)((uint16_t)frameBuf[131]<<8|frameBuf[130]);
+void parseFrame() {
+  if (framePos < MIN_FRAME_SIZE) {
+    Serial.printf("[FRAME] 帧太短: %d bytes (需要>=300)\n", framePos);
+    return;
+  }
+
+  uint8_t crcCalc = calcCRC(frameBuf, framePos - 1);
+  uint8_t crcRecv = frameBuf[framePos - 1];
+  bool crcOk = (crcCalc == crcRecv);
+
+  Serial.printf("[FRAME] 收到 %d 字节, 类型=0x%02X, CRC=%s\n",
+    framePos, frameBuf[4], crcOk ? "OK" : "FAIL");
+  Serial.print(F("[FRAME] 头20字节: "));
+  hexDump(frameBuf, 0, 20);
+  Serial.println();
+
+  if (!crcOk) {
+    Serial.printf("[FRAME] CRC错误! 计算=0x%02X 接收=0x%02X\n", crcCalc, crcRecv);
+    return;
+  }
+
+  if (frameBuf[4] == 0x03) {
+    Serial.println(F("[FRAME] 这是设备信息帧(类型0x03), 跳过"));
+    return;
+  }
+
+  if (frameBuf[4] != FRAME_TYPE_CELL_INFO) {
+    Serial.printf("[FRAME] 未知帧类型: 0x%02X, 跳过\n", frameBuf[4]);
+    return;
+  }
+
+  Serial.print(F("[FRAME] 电压区(118-121): "));
+  hexDump(frameBuf, 118, 4);
+  Serial.print(F("  电流区(126-129): "));
+  hexDump(frameBuf, 126, 4);
+  Serial.print(F("  SOC(141): "));
+  Serial.printf("0x%02X=%d", frameBuf[141], frameBuf[141]);
+  Serial.print(F("  温度1(130-131): "));
+  hexDump(frameBuf, 130, 2);
+  Serial.println();
+
+  uint32_t rawV_le = (uint32_t)frameBuf[118] | ((uint32_t)frameBuf[119]<<8) |
+                     ((uint32_t)frameBuf[120]<<16) | ((uint32_t)frameBuf[121]<<24);
+  uint32_t rawV_be = ((uint32_t)frameBuf[118]<<24) | ((uint32_t)frameBuf[119]<<16) |
+                     ((uint32_t)frameBuf[120]<<8) | (uint32_t)frameBuf[121];
+  Serial.printf("[FRAME] 电压 LE=%u(%.3fV) BE=%u(%.3fV)\n",
+    rawV_le, rawV_le*0.001f, rawV_be, rawV_be*0.001f);
+
+  bms.voltage = rawV_le * 0.001f;
+
+  uint32_t rawP_le = (uint32_t)frameBuf[122] | ((uint32_t)frameBuf[123]<<8) |
+                     ((uint32_t)frameBuf[124]<<16) | ((uint32_t)frameBuf[125]<<24);
+  bms.power = rawP_le * 0.001f;
+
+  int32_t rawI_le = (int32_t)((uint32_t)frameBuf[126] | ((uint32_t)frameBuf[127]<<8) |
+                   ((uint32_t)frameBuf[128]<<16) | ((uint32_t)frameBuf[129]<<24));
+  bms.current = rawI_le * 0.001f;
+
+  int16_t rT1 = (int16_t)(frameBuf[130] | (frameBuf[131]<<8));
   bms.temp1 = rT1 * 0.1f;
-  int16_t rT2 = (int16_t)((uint16_t)frameBuf[133]<<8|frameBuf[132]);
+  int16_t rT2 = (int16_t)(frameBuf[132] | (frameBuf[133]<<8));
   bms.temp2 = rT2 * 0.1f;
   bms.soc = frameBuf[141];
-  bms.capacity_remain = ((uint32_t)frameBuf[145]<<24|(uint32_t)frameBuf[144]<<16|
-                         (uint32_t)frameBuf[143]<<8|(uint32_t)frameBuf[142]) * 0.001f;
-  bms.capacity_nominal = ((uint32_t)frameBuf[149]<<24|(uint32_t)frameBuf[148]<<16|
-                          (uint32_t)frameBuf[147]<<8|(uint32_t)frameBuf[146]) * 0.001f;
+
+  uint32_t rawCR_le = (uint32_t)frameBuf[142] | ((uint32_t)frameBuf[143]<<8) |
+                      ((uint32_t)frameBuf[144]<<16) | ((uint32_t)frameBuf[145]<<24);
+  bms.capacity_remain = rawCR_le * 0.001f;
+
+  uint32_t rawCN_le = (uint32_t)frameBuf[146] | ((uint32_t)frameBuf[147]<<8) |
+                      ((uint32_t)frameBuf[148]<<16) | ((uint32_t)frameBuf[149]<<24);
+  bms.capacity_nominal = rawCN_le * 0.001f;
+
   bms.isCharging    = (bms.current > 0.05f);
   bms.isDischarging = (bms.current < -0.05f);
   bms.dataValid     = true;
   bms.lastUpdate    = millis();
   newDataReady      = true;
+  lastFrameWasCellInfo = true;
 
   Serial.printf("[BMS] V=%.2f P=%.1f I=%.2f SOC=%d%% T=%.1f Cap=%.1f/%.1f\n",
     bms.voltage, bms.power, bms.current, bms.soc, bms.temp1,
     bms.capacity_remain, bms.capacity_nominal);
 }
 
-// ===================== BLE 通知回调 =====================
+// ===================== BLE 通知回调(esphome风格帧组装) =====================
 void notifyCallback(BLERemoteCharacteristic*, uint8_t* pData, size_t length, bool) {
+  if (framePos > MAX_FRAME_SIZE) {
+    framePos = 0;
+  }
   if (length >= 4 && pData[0]==0x55 && pData[1]==0xAA && pData[2]==0xEB && pData[3]==0x90) {
     framePos = 0;
-    frameStarted = true;
   }
-  if (frameStarted) {
-    for (size_t i = 0; i < length; i++) {
-      if (framePos < MAX_FRAME_SIZE) frameBuf[framePos++] = pData[i];
-      if (framePos >= MIN_FRAME_SIZE) {
-        frameStarted = false;
-        parseCellInfoFrame();
-        break;
-      }
+  for (size_t i = 0; i < length; i++) {
+    if (framePos < MAX_FRAME_SIZE) {
+      frameBuf[framePos++] = pData[i];
     }
+  }
+  if (framePos >= MIN_FRAME_SIZE) {
+    parseFrame();
+    framePos = 0;
   }
 }
 
@@ -546,7 +607,48 @@ void handleSerialCommand(String cmd) {
     Serial.println(F("  status    - 查看当前状态"));
     Serial.println(F("  data      - 手动请求数据"));
     Serial.println(F("  restart   - 重启BLE"));
+    Serial.println(F("  dump      - 转储原始帧数据"));
     Serial.println(F("  help      - 显示帮助"));
+    Serial.println(F("=============================="));
+
+  } else if (cmd == "dump") {
+    Serial.printf("[DUMP] 帧缓冲区 %d 字节:\n", framePos);
+    for (int i = 0; i < framePos; i++) {
+      if (frameBuf[i] < 0x10) Serial.print(F("0"));
+      Serial.print(frameBuf[i], HEX);
+      Serial.print(F(" "));
+      if ((i + 1) % 20 == 0) Serial.println();
+    }
+    Serial.println();
+    Serial.println(F("=============================="));
+    Serial.println(F("关键偏移量数据:"));
+    Serial.print(F("  头(0-3): ")); hexDump(frameBuf, 0, 4); Serial.println();
+    Serial.printf("  类型(4): 0x%02X\n", frameBuf[4]);
+    Serial.printf("  计数(5): 0x%02X\n", frameBuf[5]);
+    Serial.print(F("  电芯1(6-7): ")); hexDump(frameBuf, 6, 2);
+    Serial.printf(" = %d mV\n", frameBuf[6] | (frameBuf[7]<<8));
+    Serial.print(F("  电芯2(8-9): ")); hexDump(frameBuf, 8, 2);
+    Serial.printf(" = %d mV\n", frameBuf[8] | (frameBuf[9]<<8));
+    Serial.print(F("  电压(118-121): ")); hexDump(frameBuf, 118, 4);
+    { uint32_t v = (uint32_t)frameBuf[118]|((uint32_t)frameBuf[119]<<8)|((uint32_t)frameBuf[120]<<16)|((uint32_t)frameBuf[121]<<24);
+      uint32_t vbe = ((uint32_t)frameBuf[118]<<24)|((uint32_t)frameBuf[119]<<16)|((uint32_t)frameBuf[120]<<8)|frameBuf[121];
+      Serial.printf(" LE=%u(%.3fV) BE=%u(%.3fV)\n", v, v*0.001f, vbe, vbe*0.001f); }
+    Serial.print(F("  功率(122-125): ")); hexDump(frameBuf, 122, 4);
+    { uint32_t p = (uint32_t)frameBuf[122]|((uint32_t)frameBuf[123]<<8)|((uint32_t)frameBuf[124]<<16)|((uint32_t)frameBuf[125]<<24);
+      Serial.printf(" LE=%u(%.3fW)\n", p, p*0.001f); }
+    Serial.print(F("  电流(126-129): ")); hexDump(frameBuf, 126, 4);
+    { int32_t c = (int32_t)((uint32_t)frameBuf[126]|((uint32_t)frameBuf[127]<<8)|((uint32_t)frameBuf[128]<<16)|((uint32_t)frameBuf[129]<<24));
+      Serial.printf(" LE=%d(%.3fA)\n", c, c*0.001f); }
+    Serial.print(F("  温度1(130-131): ")); hexDump(frameBuf, 130, 2);
+    { int16_t t = (int16_t)(frameBuf[130]|(frameBuf[131]<<8));
+      Serial.printf(" = %.1fC\n", t*0.1f); }
+    Serial.printf("  SOC(141): 0x%02X = %d%%\n", frameBuf[141], frameBuf[141]);
+    Serial.print(F("  剩余容量(142-145): ")); hexDump(frameBuf, 142, 4);
+    { uint32_t cr = (uint32_t)frameBuf[142]|((uint32_t)frameBuf[143]<<8)|((uint32_t)frameBuf[144]<<16)|((uint32_t)frameBuf[145]<<24);
+      Serial.printf(" LE=%u(%.3fAh)\n", cr, cr*0.001f); }
+    Serial.print(F("  标称容量(146-149): ")); hexDump(frameBuf, 146, 4);
+    { uint32_t cn = (uint32_t)frameBuf[146]|((uint32_t)frameBuf[147]<<8)|((uint32_t)frameBuf[148]<<16)|((uint32_t)frameBuf[149]<<24);
+      Serial.printf(" LE=%u(%.3fAh)\n", cn, cn*0.001f); }
     Serial.println(F("=============================="));
 
   } else {
