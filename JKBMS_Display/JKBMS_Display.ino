@@ -14,13 +14,13 @@
  *    - LVGL v8.3.x by kisvegabor
  *    - ESP32 BLE Arduino (built-in with ESP32 core)
  *
- *  Display Wiring (ST7789 -> ESP32):
- *    SCK  -> GPIO18
- *    SDA  -> GPIO23 (MOSI)
- *    CS   -> GPIO5
- *    DC   -> GPIO2
- *    RST  -> GPIO4
- *    BL   -> 3.3V (or GPIO16)
+ *  Display Wiring (ST7789 -> ESP32-32E):
+ *    SCK  -> IO14 (TFT_SCK)
+ *    SDA  -> IO13 (TFT_MOSI)
+ *    CS   -> IO15 (TFT_CS)
+ *    DC   -> IO2  (TFT_RS)
+ *    RST  -> EN   (共享复位引脚)
+ *    BL   -> IO21 (TFT_BL)
  *    GND  -> GND
  *    VCC  -> 3.3V
  *
@@ -28,11 +28,12 @@
  *    #define ST7789_DRIVER
  *    #define TFT_WIDTH  240
  *    #define TFT_HEIGHT 320
- *    #define TFT_MOSI 23
- *    #define TFT_SCLK 18
- *    #define TFT_CS   5
+ *    #define TFT_MOSI 13
+ *    #define TFT_SCLK 14
+ *    #define TFT_CS   15
  *    #define TFT_DC   2
- *    #define TFT_RST  4
+ *    #define TFT_RST  -1  // 使用共享复位引脚EN
+ *    #define TFT_BL   21
  *    #define LOAD_GLCD
  *    #define LOAD_FONT2
  *    #define LOAD_GFXFF
