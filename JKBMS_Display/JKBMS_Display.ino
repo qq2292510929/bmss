@@ -162,24 +162,31 @@ static void parseCellInfo(const uint8_t* d, uint16_t len) {
         return;
     }
 
-    bms.voltage   = readU32(d, 118) / 1000.0f;
-    bms.power     = readU32(d, 122) / 1000.0f;
-    bms.current   = readI32(d, 126) / 1000.0f;
-    bms.temp1     = readI16(d, 130) / 10.0f;
-    bms.temp2     = readI16(d, 132) / 10.0f;
-    bms.errors    = readU16(d, 134);
-    bms.balancing = (d[140] != 0);
-    bms.soc       = d[141];
-    bms.remainCap = readU32(d, 142) / 1000.0f;
-    bms.nominalCap= readU32(d, 146) / 1000.0f;
-    bms.charging  = (d[166] == 1);
-    bms.discharging = (d[167] == 1);
+    Serial.printf("RAW frame len=%d first20:", len);
+    for (int i = 0; i < 20 && i < len; i++) Serial.printf(" %02X", d[i]);
+    Serial.printf("\nRAW offset150-200:");
+    for (int i = 150; i < 200 && i < len; i++) Serial.printf(" %02X", d[i]);
+    Serial.println();
+
+    bms.voltage   = readU32(d, 150) / 1000.0f;
+    bms.power     = readU32(d, 154) / 1000.0f;
+    bms.current   = readI32(d, 158) / 1000.0f;
+    bms.temp1     = readI16(d, 162) / 10.0f;
+    bms.temp2     = readI16(d, 164) / 10.0f;
+    bms.errors    = readU16(d, 166);
+    bms.balancing = (d[172] != 0);
+    bms.soc       = d[173];
+    bms.remainCap = readU32(d, 174) / 1000.0f;
+    bms.nominalCap= readU32(d, 178) / 1000.0f;
+    bms.charging  = (d[198] == 1);
+    bms.discharging = (d[199] == 1);
     bms.lastUpdate = millis();
     bms.online    = true;
 
-    Serial.printf("V=%.2f I=%.2f P=%.1f SOC=%d T1=%.1f Rem=%.1f/%.1f\n",
+    Serial.printf("V=%.2f I=%.2f P=%.1f SOC=%d T1=%.1f T2=%.1f Rem=%.1f/%.1f C=%d D=%d\n",
         bms.voltage, bms.current, bms.power, bms.soc,
-        bms.temp1, bms.remainCap, bms.nominalCap);
+        bms.temp1, bms.temp2, bms.remainCap, bms.nominalCap,
+        bms.charging, bms.discharging);
 }
 
 static void notifyCB(BLERemoteCharacteristic*, uint8_t* pData, size_t length, bool) {
