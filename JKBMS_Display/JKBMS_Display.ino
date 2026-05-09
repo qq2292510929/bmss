@@ -1,6 +1,6 @@
 /*
  * ================================================================
- *  JKBMS BLE Monitor - ESP32 + ST7789 + LVGL
+ *  JKBMS BLE Monitor v2 - ESP32 + ST7789 + LVGL
  * ================================================================
  *
  *  Hardware:
@@ -9,44 +9,18 @@
  *    - JKBMS JK-BD4A24S10P (JK02_32S protocol)
  *    - BLE MAC: 98:da:20:07:b9:00
  *
- *  Libraries (install via Arduino Library Manager):
- *    - TFT_eSPI by Bodmer (v2.4.79 for ESP32 Core 2.x)
- *    - LVGL v8.3.x by kisvegabor
- *    - ESP32 BLE Arduino (built-in with ESP32 core)
- *
  *  Display Wiring (ST7789 -> ESP32-32E):
- *    SCK  -> IO14 (TFT_SCK)
- *    SDA  -> IO13 (TFT_MOSI)
- *    CS   -> IO15 (TFT_CS)
- *    DC   -> IO2  (TFT_RS)
- *    RST  -> EN   (共享复位引脚)
- *    BL   -> IO21 (TFT_BL)
- *    GND  -> GND
- *    VCC  -> 3.3V
+ *    SCK  -> IO14   SDA  -> IO13   CS  -> IO15
+ *    DC   -> IO2    RST  -> EN     BL  -> IO21
  *
- *  TFT_eSPI User_Setup.h settings:
- *    #define ST7789_DRIVER
- *    #define TFT_WIDTH  240
- *    #define TFT_HEIGHT 320
- *    #define TFT_MOSI 13
- *    #define TFT_SCLK 14
- *    #define TFT_CS   15
- *    #define TFT_DC   2
- *    #define TFT_RST  -1
- *    #define TFT_BL   21
- *    #define LOAD_GLCD
- *    #define LOAD_FONT2
- *    #define LOAD_GFXFF
- *    #define SMOOTH_FONT
- *    #define SPI_FREQUENCY  40000000
- *
- *  Chinese Font Generation:
+ *  Chinese Font Generation (MUST regenerate!):
  *    1. Visit https://lvgl.io/tools/fontconverter
- *    2. Settings: Name=cn_font_16, Size=16, Bpp=4, TTF=NotoSansSC-Regular
- *    3. Symbols: 功充放电压电流温度电池容量已用总瓦伏安度连接中状态健康运行秒时循环剩余额定待机实▲▼◆
- *    4. Download .c file, place in sketch folder
- *    5. Delete the line ".static_bitmap = 0," from the generated file (LVGL 9.x field)
- *    6. Uncomment #define USE_CN_FONT below
+ *    2. Name=cn_font_16, Size=16, Bpp=4
+ *    3. TTF: NotoSansSC-Regular (download from Google Fonts)
+ *    4. Range: 0x20-0x7E,0x25B2,0x25BC,0x25C6,0x00B0
+ *    5. Symbols: 功率充放电压电流温度电池容量已用总瓦伏安度连接中状态健康运行秒时循环剩余额定待机实单体均衡保护告警在线离线错误
+ *    6. Download .c, DELETE line ".static_bitmap = 0," (LVGL 9.x field)
+ *    7. Place cn_font_16.c in sketch folder
  *
  * ================================================================
  */
@@ -68,7 +42,6 @@ LV_FONT_DECLARE(cn_font_16);
 #endif
 
 #define JKBMS_MAC  "98:da:20:07:b9:00"
-#define JKBMS_NAME "JK_BD4A24S10P"
 
 #define CMD_CELL_INFO   0x96
 #define CMD_DEVICE_INFO 0x97
@@ -120,33 +93,37 @@ static lv_disp_draw_buf_t drawBuf;
 static lv_color_t lvBuf[SCREEN_W * BUF_LINES];
 
 static lv_obj_t* scr;
+static lv_obj_t* lblStatus;
+static lv_obj_t* contPower;
 static lv_obj_t* lblPowerTitle;
 static lv_obj_t* lblPower;
 static lv_obj_t* lblPowerUnit;
 static lv_obj_t* lblMode;
-static lv_obj_t* barPower;
+static lv_obj_t* lineAccent1;
+static lv_obj_t* contCap;
 static lv_obj_t* lblCapTitle;
 static lv_obj_t* lblSoc;
 static lv_obj_t* lblSocUnit;
 static lv_obj_t* barSoc;
 static lv_obj_t* lblCapDetail;
+static lv_obj_t* lineAccent2;
+static lv_obj_t* contBottom;
 static lv_obj_t* lblTemp;
 static lv_obj_t* lblVolt;
 static lv_obj_t* lblCurr;
-static lv_obj_t* lblStatus;
-static lv_obj_t* contPower;
-static lv_obj_t* contCap;
-static lv_obj_t* contBottom;
 
-static lv_style_t styleCont;
+static lv_style_t styleCard;
 static lv_style_t stylePowerNum;
 static lv_style_t styleSocNum;
-static lv_style_t styleLabelSm;
+static lv_style_t styleCnTitle;
+static lv_style_t styleMode;
+static lv_style_t styleUnit;
 static lv_style_t styleDetail;
 static lv_style_t styleBarBg;
-static lv_style_t styleBarIndGreen;
-static lv_style_t styleBarIndOrange;
-static lv_style_t styleBarIndCyan;
+static lv_style_t styleBarGreen;
+static lv_style_t styleBarOrange;
+static lv_style_t styleBarCyan;
+static lv_style_t styleAccentLine;
 
 static uint8_t calcCRC(const uint8_t* d, uint16_t len) {
     uint8_t c = 0;
@@ -320,10 +297,9 @@ static bool connectBMS() {
         return false;
     }
 
-    Serial.printf("WriteChar handle=0x%04X NotifyChar handle=0x%04X\n",
+    Serial.printf("WriteChar=0x%04X NotifyChar=0x%04X\n",
         pWriteChar->getHandle(), pNotifyChar->getHandle());
 
-    Serial.println("Registering notifications...");
     pNotifyChar->registerForNotify(notifyCB, true);
 
     delay(300);
@@ -363,13 +339,12 @@ static void initDisplay() {
 }
 
 static void initStyles() {
-    lv_style_init(&styleCont);
-    lv_style_set_bg_color(&styleCont, lv_color_hex(0x0A0A0A));
-    lv_style_set_bg_opa(&styleCont, LV_OPA_COVER);
-    lv_style_set_border_color(&styleCont, lv_color_hex(0x1A1A2E));
-    lv_style_set_border_width(&styleCont, 1);
-    lv_style_set_radius(&styleCont, 6);
-    lv_style_set_pad_all(&styleCont, 4);
+    lv_style_init(&styleCard);
+    lv_style_set_bg_color(&styleCard, lv_color_hex(0x0D0D1A));
+    lv_style_set_bg_opa(&styleCard, LV_OPA_COVER);
+    lv_style_set_border_width(&styleCard, 0);
+    lv_style_set_radius(&styleCard, 10);
+    lv_style_set_pad_all(&styleCard, 6);
 
     lv_style_init(&stylePowerNum);
     lv_style_set_text_font(&stylePowerNum, &lv_font_montserrat_48);
@@ -377,41 +352,77 @@ static void initStyles() {
     lv_style_set_text_align(&stylePowerNum, LV_TEXT_ALIGN_CENTER);
 
     lv_style_init(&styleSocNum);
-    lv_style_set_text_font(&styleSocNum, &lv_font_montserrat_40);
+    lv_style_set_text_font(&styleSocNum, &lv_font_montserrat_36);
     lv_style_set_text_color(&styleSocNum, lv_color_hex(0x00D4FF));
-    lv_style_set_text_align(&styleSocNum, LV_TEXT_ALIGN_CENTER);
+    lv_style_set_text_align(&styleSocNum, LV_TEXT_ALIGN_LEFT);
 
-    lv_style_init(&styleLabelSm);
-    lv_style_set_text_font(&styleLabelSm, CN_FONT);
-    lv_style_set_text_color(&styleLabelSm, lv_color_hex(0x666688));
-    lv_style_set_text_align(&styleLabelSm, LV_TEXT_ALIGN_LEFT);
+    lv_style_init(&styleCnTitle);
+    lv_style_set_text_font(&styleCnTitle, CN_FONT);
+    lv_style_set_text_color(&styleCnTitle, lv_color_hex(0x5555AA));
+    lv_style_set_text_align(&styleCnTitle, LV_TEXT_ALIGN_LEFT);
+
+    lv_style_init(&styleMode);
+    lv_style_set_text_font(&styleMode, CN_FONT);
+    lv_style_set_text_color(&styleMode, lv_color_hex(0x39FF14));
+    lv_style_set_text_align(&styleMode, LV_TEXT_ALIGN_CENTER);
+
+    lv_style_init(&styleUnit);
+    lv_style_set_text_font(&styleUnit, &lv_font_montserrat_20);
+    lv_style_set_text_color(&styleUnit, lv_color_hex(0x444466));
+    lv_style_set_text_align(&styleUnit, LV_TEXT_ALIGN_LEFT);
 
     lv_style_init(&styleDetail);
-    lv_style_set_text_font(&styleDetail, &lv_font_montserrat_18);
-    lv_style_set_text_color(&styleDetail, lv_color_hex(0xAAAACC));
+    lv_style_set_text_font(&styleDetail, &lv_font_montserrat_16);
+    lv_style_set_text_color(&styleDetail, lv_color_hex(0x8888BB));
     lv_style_set_text_align(&styleDetail, LV_TEXT_ALIGN_CENTER);
 
     lv_style_init(&styleBarBg);
-    lv_style_set_bg_color(&styleBarBg, lv_color_hex(0x1A1A2E));
+    lv_style_set_bg_color(&styleBarBg, lv_color_hex(0x1A1A30));
     lv_style_set_bg_opa(&styleBarBg, LV_OPA_COVER);
-    lv_style_set_radius(&styleBarBg, 4);
+    lv_style_set_radius(&styleBarBg, 6);
 
-    lv_style_init(&styleBarIndGreen);
-    lv_style_set_bg_color(&styleBarIndGreen, lv_color_hex(0x39FF14));
-    lv_style_set_bg_opa(&styleBarIndGreen, LV_OPA_COVER);
-    lv_style_set_radius(&styleBarIndGreen, 4);
+    lv_style_init(&styleBarGreen);
+    lv_style_set_bg_color(&styleBarGreen, lv_color_hex(0x39FF14));
+    lv_style_set_bg_opa(&styleBarGreen, LV_OPA_COVER);
+    lv_style_set_radius(&styleBarGreen, 6);
 
-    lv_style_init(&styleBarIndOrange);
-    lv_style_set_bg_color(&styleBarIndOrange, lv_color_hex(0xFF6600));
-    lv_style_set_bg_opa(&styleBarIndOrange, LV_OPA_COVER);
-    lv_style_set_radius(&styleBarIndOrange, 4);
+    lv_style_init(&styleBarOrange);
+    lv_style_set_bg_color(&styleBarOrange, lv_color_hex(0xFF6600));
+    lv_style_set_bg_opa(&styleBarOrange, LV_OPA_COVER);
+    lv_style_set_radius(&styleBarOrange, 6);
 
-    lv_style_init(&styleBarIndCyan);
-    lv_style_set_bg_color(&styleBarIndCyan, lv_color_hex(0x00D4FF));
-    lv_style_set_bg_opa(&styleBarIndCyan, LV_OPA_COVER);
-    lv_style_set_radius(&styleBarIndCyan, 4);
+    lv_style_init(&styleBarCyan);
+    lv_style_set_bg_color(&styleBarCyan, lv_color_hex(0x00D4FF));
+    lv_style_set_bg_opa(&styleBarCyan, LV_OPA_COVER);
+    lv_style_set_radius(&styleBarCyan, 6);
+
+    lv_style_init(&styleAccentLine);
+    lv_style_set_bg_color(&styleAccentLine, lv_color_hex(0x1A1A3E));
+    lv_style_set_bg_opa(&styleAccentLine, LV_OPA_COVER);
+    lv_style_set_radius(&styleAccentLine, 1);
+    lv_style_set_pad_all(&styleAccentLine, 0);
 }
 
+/*
+ * Layout (320x240):
+ *
+ *   y=4   ┌─────────────────────────────────┐
+ *         │  实时功率                         │  h=90
+ *         │       1,234.5  W                 │
+ *         │         ▲ 充电                    │
+ *   y=94  └─────────────────────────────────┘
+ *   y=96  ═══════════════════════════════════  accent line h=2
+ *   y=102 ┌─────────────────────────────────┐
+ *         │  电池容量   78%  ████████░░░░    │  h=76
+ *         │         45.6 / 58.0 Ah          │
+ *   y=178 └─────────────────────────────────┘
+ *   y=180 ═══════════════════════════════════  accent line h=2
+ *   y=186 ┌─────────────────────────────────┐
+ *         │  32.5°C    52.30V    23.50A     │  h=28
+ *   y=214 └─────────────────────────────────┘
+ *
+ *   Total: 214 + 26px bottom margin = 240 ✓
+ */
 static void createUI() {
     scr = lv_scr_act();
     lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
@@ -420,19 +431,18 @@ static void createUI() {
     lblStatus = lv_label_create(scr);
     lv_obj_set_style_text_font(lblStatus, &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x444466), 0);
-    lv_obj_align(lblStatus, LV_ALIGN_TOP_RIGHT, -5, 2);
+    lv_obj_align(lblStatus, LV_ALIGN_TOP_RIGHT, -6, 4);
     lv_label_set_text(lblStatus, "BLE...");
 
     contPower = lv_obj_create(scr);
-    lv_obj_set_size(contPower, 310, 105);
-    lv_obj_align(contPower, LV_ALIGN_TOP_MID, 0, 12);
-    lv_obj_add_style(contPower, &styleCont, 0);
+    lv_obj_set_size(contPower, 316, 90);
+    lv_obj_align(contPower, LV_ALIGN_TOP_MID, 0, 4);
+    lv_obj_add_style(contPower, &styleCard, 0);
     lv_obj_clear_flag(contPower, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_color(contPower, lv_color_hex(0x39FF14), 0);
 
     lblPowerTitle = lv_label_create(contPower);
-    lv_obj_add_style(lblPowerTitle, &styleLabelSm, 0);
-    lv_obj_align(lblPowerTitle, LV_ALIGN_TOP_MID, 0, 2);
+    lv_obj_add_style(lblPowerTitle, &styleCnTitle, 0);
+    lv_obj_align(lblPowerTitle, LV_ALIGN_TOP_MID, 0, 0);
 #ifdef USE_CN_FONT
     lv_label_set_text(lblPowerTitle, "\xe5\xae\x9e\xe6\x97\xb6\xe5\x8a\x9f\xe7\x8e\x87");
 #else
@@ -441,39 +451,34 @@ static void createUI() {
 
     lblPower = lv_label_create(contPower);
     lv_obj_add_style(lblPower, &stylePowerNum, 0);
-    lv_obj_align(lblPower, LV_ALIGN_CENTER, -25, 4);
+    lv_obj_align(lblPower, LV_ALIGN_CENTER, -20, 2);
     lv_label_set_text(lblPower, "0.0");
 
     lblPowerUnit = lv_label_create(contPower);
-    lv_obj_set_style_text_font(lblPowerUnit, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(lblPowerUnit, lv_color_hex(0x555577), 0);
-    lv_obj_align_to(lblPowerUnit, lblPower, LV_ALIGN_OUT_RIGHT_BOTTOM, 4, 0);
+    lv_obj_add_style(lblPowerUnit, &styleUnit, 0);
+    lv_obj_align_to(lblPowerUnit, lblPower, LV_ALIGN_OUT_RIGHT_BOTTOM, 4, -2);
     lv_label_set_text(lblPowerUnit, "W");
 
     lblMode = lv_label_create(contPower);
-    lv_obj_set_style_text_font(lblMode, CN_FONT, 0);
-    lv_obj_set_style_text_color(lblMode, lv_color_hex(0x39FF14), 0);
-    lv_obj_align(lblMode, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_add_style(lblMode, &styleMode, 0);
+    lv_obj_align(lblMode, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_label_set_text(lblMode, "--");
 
-    barPower = lv_bar_create(scr);
-    lv_obj_set_size(barPower, 310, 6);
-    lv_obj_align_to(barPower, contPower, LV_ALIGN_OUT_BOTTOM_MID, 0, 3);
-    lv_bar_set_range(barPower, 0, 5000);
-    lv_bar_set_value(barPower, 0, LV_ANIM_OFF);
-    lv_obj_add_style(barPower, &styleBarBg, LV_PART_MAIN);
-    lv_obj_add_style(barPower, &styleBarIndGreen, LV_PART_INDICATOR);
+    lineAccent1 = lv_obj_create(scr);
+    lv_obj_set_size(lineAccent1, 296, 2);
+    lv_obj_align(lineAccent1, LV_ALIGN_TOP_MID, 0, 96);
+    lv_obj_add_style(lineAccent1, &styleAccentLine, 0);
+    lv_obj_clear_flag(lineAccent1, LV_OBJ_FLAG_SCROLLABLE);
 
     contCap = lv_obj_create(scr);
-    lv_obj_set_size(contCap, 310, 80);
-    lv_obj_align_to(contCap, barPower, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
-    lv_obj_add_style(contCap, &styleCont, 0);
+    lv_obj_set_size(contCap, 316, 76);
+    lv_obj_align(contCap, LV_ALIGN_TOP_MID, 0, 102);
+    lv_obj_add_style(contCap, &styleCard, 0);
     lv_obj_clear_flag(contCap, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_color(contCap, lv_color_hex(0x00D4FF), 0);
 
     lblCapTitle = lv_label_create(contCap);
-    lv_obj_add_style(lblCapTitle, &styleLabelSm, 0);
-    lv_obj_align(lblCapTitle, LV_ALIGN_TOP_LEFT, 4, 2);
+    lv_obj_add_style(lblCapTitle, &styleCnTitle, 0);
+    lv_obj_align(lblCapTitle, LV_ALIGN_TOP_LEFT, 2, 0);
 #ifdef USE_CN_FONT
     lv_label_set_text(lblCapTitle, "\xe7\x94\xb5\xe6\xb1\xa0\xe5\xae\xb9\xe9\x87\x8f");
 #else
@@ -482,40 +487,46 @@ static void createUI() {
 
     lblSoc = lv_label_create(contCap);
     lv_obj_add_style(lblSoc, &styleSocNum, 0);
-    lv_obj_align(lblSoc, LV_ALIGN_LEFT_MID, 8, 4);
+    lv_obj_align(lblSoc, LV_ALIGN_LEFT_MID, 2, 4);
     lv_label_set_text(lblSoc, "0");
 
     lblSocUnit = lv_label_create(contCap);
-    lv_obj_set_style_text_font(lblSocUnit, &lv_font_montserrat_18, 0);
-    lv_obj_set_style_text_color(lblSocUnit, lv_color_hex(0x555577), 0);
-    lv_obj_align_to(lblSocUnit, lblSoc, LV_ALIGN_OUT_RIGHT_BOTTOM, 2, 0);
+    lv_obj_set_style_text_font(lblSocUnit, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(lblSocUnit, lv_color_hex(0x444466), 0);
+    lv_obj_align_to(lblSocUnit, lblSoc, LV_ALIGN_OUT_RIGHT_BOTTOM, 2, -2);
     lv_label_set_text(lblSocUnit, "%");
 
     barSoc = lv_bar_create(contCap);
-    lv_obj_set_size(barSoc, 140, 14);
-    lv_obj_align(barSoc, LV_ALIGN_RIGHT_MID, -8, -4);
+    lv_obj_set_size(barSoc, 130, 12);
+    lv_obj_align(barSoc, LV_ALIGN_RIGHT_MID, -6, -2);
     lv_bar_set_range(barSoc, 0, 100);
     lv_bar_set_value(barSoc, 0, LV_ANIM_OFF);
     lv_obj_add_style(barSoc, &styleBarBg, LV_PART_MAIN);
-    lv_obj_add_style(barSoc, &styleBarIndCyan, LV_PART_INDICATOR);
+    lv_obj_add_style(barSoc, &styleBarCyan, LV_PART_INDICATOR);
 
     lblCapDetail = lv_label_create(contCap);
     lv_obj_set_style_text_font(lblCapDetail, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lblCapDetail, lv_color_hex(0x666688), 0);
-    lv_obj_align(lblCapDetail, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_set_style_text_color(lblCapDetail, lv_color_hex(0x555588), 0);
+    lv_obj_align(lblCapDetail, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_label_set_text(lblCapDetail, "0.0 / 0.0 Ah");
 
+    lineAccent2 = lv_obj_create(scr);
+    lv_obj_set_size(lineAccent2, 296, 2);
+    lv_obj_align(lineAccent2, LV_ALIGN_TOP_MID, 0, 180);
+    lv_obj_add_style(lineAccent2, &styleAccentLine, 0);
+    lv_obj_clear_flag(lineAccent2, LV_OBJ_FLAG_SCROLLABLE);
+
     contBottom = lv_obj_create(scr);
-    lv_obj_set_size(contBottom, 310, 32);
-    lv_obj_align_to(contBottom, contCap, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
-    lv_obj_add_style(contBottom, &styleCont, 0);
+    lv_obj_set_size(contBottom, 316, 28);
+    lv_obj_align(contBottom, LV_ALIGN_TOP_MID, 0, 186);
+    lv_obj_add_style(contBottom, &styleCard, 0);
     lv_obj_clear_flag(contBottom, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_border_color(contBottom, lv_color_hex(0xFFAA00), 0);
-    lv_obj_set_style_pad_hor(contBottom, 8, 0);
+    lv_obj_set_style_pad_hor(contBottom, 10, 0);
+    lv_obj_set_style_pad_ver(contBottom, 2, 0);
 
     lblTemp = lv_label_create(contBottom);
     lv_obj_add_style(lblTemp, &styleDetail, 0);
-    lv_obj_set_style_text_color(lblTemp, lv_color_hex(0xFFAA00), 0);
+    lv_obj_set_style_text_color(lblTemp, lv_color_hex(0xFFB800), 0);
     lv_obj_align(lblTemp, LV_ALIGN_LEFT_MID, 0, 0);
     lv_label_set_text(lblTemp, "--\xC2\xB0""C");
 
@@ -532,19 +543,23 @@ static void createUI() {
     lv_label_set_text(lblCurr, "--A");
 }
 
+static void setAccentColor(lv_color_t color) {
+    lv_obj_set_style_bg_color(lineAccent1, color, 0);
+}
+
 static void updateUI() {
     char buf[32];
     unsigned long age = millis() - bms.lastUpdate;
     bool dataFresh = bms.online && age < 10000;
 
     if (!bleConnected) {
-        lv_label_set_text(lblStatus, "BLE X");
+        lv_label_set_text(lblStatus, "\xE2\x97\x8F BLE X");
         lv_obj_set_style_text_color(lblStatus, lv_color_hex(0xFF3333), 0);
     } else if (!dataFresh) {
-        lv_label_set_text(lblStatus, "WAIT");
+        lv_label_set_text(lblStatus, "\xE2\x97\x8F WAIT");
         lv_obj_set_style_text_color(lblStatus, lv_color_hex(0xFFAA00), 0);
     } else {
-        lv_label_set_text(lblStatus, "LIVE");
+        lv_label_set_text(lblStatus, "\xE2\x97\x8F LIVE");
         lv_obj_set_style_text_color(lblStatus, lv_color_hex(0x39FF14), 0);
     }
 
@@ -556,10 +571,8 @@ static void updateUI() {
 
     if (bms.current > 0.05f) {
         lv_obj_set_style_text_color(lblPower, lv_color_hex(0x39FF14), 0);
-        lv_obj_set_style_border_color(contPower, lv_color_hex(0x39FF14), 0);
-        lv_obj_remove_style(barPower, &styleBarIndOrange, LV_PART_INDICATOR);
-        lv_obj_add_style(barPower, &styleBarIndGreen, LV_PART_INDICATOR);
         lv_obj_set_style_text_color(lblMode, lv_color_hex(0x39FF14), 0);
+        setAccentColor(lv_color_hex(0x39FF14));
 #ifdef USE_CN_FONT
         lv_label_set_text(lblMode, "\xe2\x96\xb2 \xe5\x85\x85\xe7\x94\xb5");
 #else
@@ -567,10 +580,8 @@ static void updateUI() {
 #endif
     } else if (bms.current < -0.05f) {
         lv_obj_set_style_text_color(lblPower, lv_color_hex(0xFF6600), 0);
-        lv_obj_set_style_border_color(contPower, lv_color_hex(0xFF6600), 0);
-        lv_obj_remove_style(barPower, &styleBarIndGreen, LV_PART_INDICATOR);
-        lv_obj_add_style(barPower, &styleBarIndOrange, LV_PART_INDICATOR);
         lv_obj_set_style_text_color(lblMode, lv_color_hex(0xFF6600), 0);
+        setAccentColor(lv_color_hex(0xFF6600));
 #ifdef USE_CN_FONT
         lv_label_set_text(lblMode, "\xe2\x96\xbc \xe6\x94\xbe\xe7\x94\xb5");
 #else
@@ -578,11 +589,8 @@ static void updateUI() {
 #endif
     } else {
         lv_obj_set_style_text_color(lblPower, lv_color_hex(0x00D4FF), 0);
-        lv_obj_set_style_border_color(contPower, lv_color_hex(0x00D4FF), 0);
-        lv_obj_remove_style(barPower, &styleBarIndGreen, LV_PART_INDICATOR);
-        lv_obj_remove_style(barPower, &styleBarIndOrange, LV_PART_INDICATOR);
-        lv_obj_add_style(barPower, &styleBarIndCyan, LV_PART_INDICATOR);
         lv_obj_set_style_text_color(lblMode, lv_color_hex(0x00D4FF), 0);
+        setAccentColor(lv_color_hex(0x00D4FF));
 #ifdef USE_CN_FONT
         lv_label_set_text(lblMode, "\xe2\x97\x86 \xe5\xbe\x85\xe6\x9c\xba");
 #else
@@ -590,26 +598,24 @@ static void updateUI() {
 #endif
     }
 
-    lv_bar_set_value(barPower, (int32_t)absPower, LV_ANIM_ON);
-
     snprintf(buf, sizeof(buf), "%d", bms.soc);
     lv_label_set_text(lblSoc, buf);
 
     if (bms.soc > 60) {
         lv_obj_set_style_text_color(lblSoc, lv_color_hex(0x39FF14), 0);
-        lv_obj_remove_style(barSoc, &styleBarIndCyan, LV_PART_INDICATOR);
-        lv_obj_remove_style(barSoc, &styleBarIndOrange, LV_PART_INDICATOR);
-        lv_obj_add_style(barSoc, &styleBarIndGreen, LV_PART_INDICATOR);
+        lv_obj_remove_style(barSoc, &styleBarOrange, LV_PART_INDICATOR);
+        lv_obj_remove_style(barSoc, &styleBarCyan, LV_PART_INDICATOR);
+        lv_obj_add_style(barSoc, &styleBarGreen, LV_PART_INDICATOR);
     } else if (bms.soc > 20) {
         lv_obj_set_style_text_color(lblSoc, lv_color_hex(0x00D4FF), 0);
-        lv_obj_remove_style(barSoc, &styleBarIndGreen, LV_PART_INDICATOR);
-        lv_obj_remove_style(barSoc, &styleBarIndOrange, LV_PART_INDICATOR);
-        lv_obj_add_style(barSoc, &styleBarIndCyan, LV_PART_INDICATOR);
+        lv_obj_remove_style(barSoc, &styleBarGreen, LV_PART_INDICATOR);
+        lv_obj_remove_style(barSoc, &styleBarOrange, LV_PART_INDICATOR);
+        lv_obj_add_style(barSoc, &styleBarCyan, LV_PART_INDICATOR);
     } else {
         lv_obj_set_style_text_color(lblSoc, lv_color_hex(0xFF6600), 0);
-        lv_obj_remove_style(barSoc, &styleBarIndGreen, LV_PART_INDICATOR);
-        lv_obj_remove_style(barSoc, &styleBarIndCyan, LV_PART_INDICATOR);
-        lv_obj_add_style(barSoc, &styleBarIndOrange, LV_PART_INDICATOR);
+        lv_obj_remove_style(barSoc, &styleBarGreen, LV_PART_INDICATOR);
+        lv_obj_remove_style(barSoc, &styleBarCyan, LV_PART_INDICATOR);
+        lv_obj_add_style(barSoc, &styleBarOrange, LV_PART_INDICATOR);
     }
 
     lv_bar_set_value(barSoc, bms.soc, LV_ANIM_ON);
@@ -629,7 +635,7 @@ static void updateUI() {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("\n\nJKBMS BLE Monitor Starting...");
+    Serial.println("\n\nJKBMS BLE Monitor v2 Starting...");
 
     memset(&bms, 0, sizeof(bms));
     bms.temp1 = -999;
