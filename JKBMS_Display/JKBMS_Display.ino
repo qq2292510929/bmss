@@ -45,14 +45,15 @@
  *    2. Settings: Name=cn_font_16, Size=16, Bpp=4, TTF=NotoSansSC-Regular
  *    3. Symbols: 功充放电压电流温度电池容量已用总瓦伏安度连接中状态健康运行秒时循环剩余额定待机实▲▼◆
  *    4. Download .c file, place in sketch folder
- *    5. Uncomment #define USE_CN_FONT below
+ *    5. Delete the line ".static_bitmap = 0," from the generated file (LVGL 9.x field)
+ *    6. Uncomment #define USE_CN_FONT below
  *
  * ================================================================
  */
 
 #define USE_CN_FONT
-#define LV_CONF_INCLUDE_SIMPLE
 
+#include "lv_conf.h"
 #include <lvgl.h>
 #include <TFT_eSPI.h>
 #include <BLEDevice.h>
