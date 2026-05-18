@@ -283,7 +283,7 @@ static void initStyles() {
     lv_style_set_text_align(&styleCapNum, LV_TEXT_ALIGN_LEFT);
 
     lv_style_init(&styleCapSlash);
-    lv_style_set_text_font(&styleCapSlash, &lv_font_montserrat_44);
+    lv_style_set_text_font(&styleCapSlash, &lv_font_montserrat_48);
     lv_style_set_text_color(&styleCapSlash, lv_color_hex(0xFF4444));
     lv_style_set_text_align(&styleCapSlash, LV_TEXT_ALIGN_CENTER);
 
@@ -332,21 +332,33 @@ static void createUI() {
     lv_obj_set_size(cornerArc, 60, 60);
     lv_obj_align(cornerArc, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_obj_add_style(cornerArc, &styleCornerArc, 0);
+    lv_obj_set_style_border_width(cornerArc, 0, 0);
+    lv_obj_set_style_pad_all(cornerArc, 0, 0);
+    lv_obj_clear_flag(cornerArc, LV_OBJ_FLAG_SCROLLABLE);
 
     lineDecor1 = lv_obj_create(scr);
     lv_obj_set_size(lineDecor1, 100, 1);
     lv_obj_align(lineDecor1, LV_ALIGN_TOP_LEFT, 90, 35);
     lv_obj_add_style(lineDecor1, &styleDecorLine, 0);
+    lv_obj_set_style_border_width(lineDecor1, 0, 0);
+    lv_obj_set_style_pad_all(lineDecor1, 0, 0);
+    lv_obj_clear_flag(lineDecor1, LV_OBJ_FLAG_SCROLLABLE);
 
     lineDecor2 = lv_obj_create(scr);
     lv_obj_set_size(lineDecor2, 1, 80);
     lv_obj_align(lineDecor2, LV_ALIGN_TOP_RIGHT, -100, 15);
     lv_obj_add_style(lineDecor2, &styleDecorLine, 0);
+    lv_obj_set_style_border_width(lineDecor2, 0, 0);
+    lv_obj_set_style_pad_all(lineDecor2, 0, 0);
+    lv_obj_clear_flag(lineDecor2, LV_OBJ_FLAG_SCROLLABLE);
 
     lineDecor3 = lv_obj_create(scr);
     lv_obj_set_size(lineDecor3, 80, 1);
     lv_obj_align(lineDecor3, LV_ALIGN_TOP_RIGHT, -20, 85);
     lv_obj_add_style(lineDecor3, &styleDecorLine, 0);
+    lv_obj_set_style_border_width(lineDecor3, 0, 0);
+    lv_obj_set_style_pad_all(lineDecor3, 0, 0);
+    lv_obj_clear_flag(lineDecor3, LV_OBJ_FLAG_SCROLLABLE);
 
     lblBle = lv_label_create(scr);
     lv_obj_set_style_text_font(lblBle, &lv_font_montserrat_16, 0);
