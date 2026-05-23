@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>机甲战士 BMS - ST7789 预览</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Noto Sans SC', sans-serif;
+    overflow: hidden;
+  }
+
+  .page-bg {
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(200,0,0,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 50%, rgba(200,0,0,0.05) 0%, transparent 60%),
+      radial-gradient(ellipse at 50% 0%, rgba(255,50,0,0.06) 0%, transparent 50%);
+    z-index: 0;
+  }
+
+  .scanline-overlay {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .title-area {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    margin-bottom: 24px;
+  }
+
+  .title-area h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 28px;
+    font-weight: 900;
+    color: #ff2020;
+    text-shadow: 0 0 20px rgba(255,30,30,0.5), 0 0 40px rgba(255,0,0,0.2);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .title-area p {
+    color: #666;
+    font-size: 13px;
+    margin-top: 6px;
+    letter-spacing: 2px;
+  }
+
+  .screen-wrapper {
+    position: relative;
+    z-index: 1;
+  }
+
+  .screen-frame {
+    position: relative;
+    width: 640px;
+    height: 480px;
+    border: 3px solid #2a1a1a;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(255,0,0,0.1),
+      0 0 30px rgba(255,0,0,0.15),
+      0 0 60px rgba(255,0,0,0.05),
+      inset 0 0 30px rgba(0,0,0,0.5);
+    background: #0a0a0a;
+  }
+
+  .screen-frame::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 13px;
+    border: 1px solid rgba(255,50,50,0.15);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .screen-content {
+    width: 640px;
+    height: 480px;
+    transform: scale(1);
+    position: relative;
+    background: #0a0a0a;
+    overflow: hidden;
+  }
+
+  /* ====== 动态背景粒子 ====== */
+  .particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: rgba(255,50,50,0.3);
+    border-radius: 50%;
+    animation: float-particle linear infinite;
+  }
+
+  @keyframes float-particle {
+    0% { transform: translateY(480px) scale(0); opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(-20px) scale(1); opacity: 0; }
+  }
+
+  /* ====== 顶部标题栏 ====== */
+  .header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 54px;
+    background: linear-gradient(90deg, rgba(180,0,0,0.6) 0%, rgba(120,0,0,0.4) 50%, rgba(180,0,0,0.6) 100%);
+    border-bottom: 1px solid rgba(255,50,50,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,80,80,0.6), transparent);
+  }
+
+  .header-title {
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255,50,50,0.5);
+    letter-spacing: 6px;
+  }
+
+  .header-decor-left, .header-decor-right {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: 'Orbitron', monospace;
+    font-size: 10px;
+    color: rgba(255,100,100,0.5);
+    letter-spacing: 1px;
+  }
+
+  .header-decor-left { left: 12px; }
+  .header-decor-right { right: 60px; }
+
+  /* ====== 蓝牙状态 ====== */
+  .ble-status {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 6;
+  }
+
+  .ble-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    position: relative;
+  }
+
+  .ble-dot.connected {
+    background: #00e040;
+    box-shadow: 0 0 8px rgba(0,224,64,0.6);
+    animation: ble-pulse 2s ease-in-out infinite;
+  }
+
+  .ble-dot.disconnected {
+    background: #ff2020;
+    box-shadow: 0 0 8px rgba(255,30,30,0.6);
+  }
+
+  .ble-dot::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.9);
+  }
+
+  @keyframes ble-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(0,224,64,0.6); }
+    50% { box-shadow: 0 0 16px rgba(0,224,64,0.9), 0 0 24px rgba(0,224,64,0.3); }
+  }
+
+  .ble-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #00e040;
+    text-shadow: 0 0 6px rgba(0,224,64,0.4);
+  }
+
+  .ble-label.off { color: #ff2020; text-shadow: 0 0 6px rgba(255,30,30,0.4); }
+
+  /* ====== 角落装饰 ====== */
+  .corner-decor {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .corner-decor.tl { top: 54px; left: 0; border-top: 2px solid; border-left: 2px solid; border-color: rgba(255,60,60,0.4); }
+  .corner-decor.tr { top: 54px; right: 0; border-top: 2px solid; border-right: 2px solid; border-color: rgba(255,60,60,0.4); }
+  .corner-decor.bl { bottom: 0; left: 0; border-bottom: 2px solid; border-left: 2px solid; border-color: rgba(255,60,60,0.4); }
+  .corner-decor.br { bottom: 0; right: 0; border-bottom: 2px solid; border-right: 2px solid; border-color: rgba(255,60,60,0.4); }
+
+  /* ====== 卡片通用样式 ====== */
+  .card {
+    position: absolute;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(25,12,12,0.95) 0%, rgba(15,8,8,0.98) 100%);
+    border: 1px solid rgba(255,50,50,0.15);
+    overflow: hidden;
+    z-index: 3;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 13px;
+    border: 1px solid rgba(255,80,80,0.08);
+    pointer-events: none;
+  }
+
+  .card-glow {
+    position: absolute;
+    top: -1px;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,80,80,0.4), transparent);
+  }
+
+  .card-label {
+    font-size: 12px;
+    color: #886666;
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  /* ====== 功率主显示区 ====== */
+  .power-card {
+    left: 30px;
+    top: 68px;
+    width: 580px;
+    height: 170px;
+  }
+
+  .power-card .card-glow {
+    background: linear-gradient(90deg, transparent, var(--power-glow, rgba(255,80,80,0.5)), transparent);
+    transition: background 1s ease;
+  }
+
+  .power-inner {
+    padding: 16px 24px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .power-label {
+    font-size: 14px;
+    color: #aa6666;
+    font-weight: 700;
+    letter-spacing: 4px;
+    margin-bottom: 8px;
+  }
+
+  .power-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .power-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 72px;
+    font-weight: 900;
+    color: var(--power-color, #ff4040);
+    text-shadow: 0 0 20px var(--power-shadow, rgba(255,50,50,0.4));
+    line-height: 1;
+    transition: color 0.8s ease, text-shadow 0.8s ease;
+  }
+
+  .power-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 28px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.6);
+  }
+
+  .power-status {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    margin-top: 8px;
+    padding: 3px 14px;
+    border-radius: 20px;
+    display: inline-block;
+  }
+
+  .power-status.discharging {
+    color: #00e060;
+    background: rgba(0,224,96,0.1);
+    border: 1px solid rgba(0,224,96,0.3);
+  }
+
+  .power-status.charging {
+    color: #ffaa00;
+    background: rgba(255,170,0,0.1);
+    border: 1px solid rgba(255,170,0,0.3);
+  }
+
+  .power-status.idle {
+    color: #666;
+    background: rgba(100,100,100,0.1);
+    border: 1px solid rgba(100,100,100,0.3);
+  }
+
+  /* 功率条 */
+  .power-bar-container {
+    position: absolute;
+    bottom: 12px;
+    left: 24px;
+    right: 24px;
+    height: 6px;
+    background: rgba(255,50,50,0.1);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .power-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--power-color, #ff4040);
+    box-shadow: 0 0 8px var(--power-shadow, rgba(255,50,50,0.4));
+    transition: width 0.5s ease, background 0.8s ease;
+  }
+
+  /* 功率脉冲动画 */
+  .power-pulse {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    border: 1px solid var(--power-shadow, rgba(255,50,50,0.1));
+    animation: power-ring 3s ease-out infinite;
+    pointer-events: none;
+  }
+
+  .power-pulse:nth-child(2) { animation-delay: 1s; }
+  .power-pulse:nth-child(3) { animation-delay: 2s; }
+
+  @keyframes power-ring {
+    0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0.6; }
+    100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  }
+
+  /* ====== 容量卡片 ====== */
+  .capacity-card {
+    left: 30px;
+    top: 252px;
+    width: 360px;
+    height: 100px;
+  }
+
+  .capacity-inner {
+    padding: 12px 18px;
+  }
+
+  .capacity-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .capacity-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .capacity-sep {
+    font-family: 'Orbitron', monospace;
+    font-size: 20px;
+    color: #666;
+  }
+
+  .capacity-total {
+    font-family: 'Orbitron', monospace;
+    font-size: 22px;
+    font-weight: 500;
+    color: #888;
+  }
+
+  .capacity-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    color: #666;
+    margin-left: 4px;
+  }
+
+  .capacity-bar {
+    margin-top: 10px;
+    height: 10px;
+    background: rgba(255,50,50,0.1);
+    border-radius: 5px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .capacity-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    background: linear-gradient(90deg, #ff2020, #ff6040);
+    box-shadow: 0 0 6px rgba(255,50,50,0.3);
+    transition: width 0.8s ease;
+    position: relative;
+  }
+
+  .capacity-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+  }
+
+  .capacity-percent {
+    position: absolute;
+    right: 18px;
+    top: 12px;
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: #ff8040;
+  }
+
+  /* ====== SOC卡片 ====== */
+  .soc-card {
+    left: 404px;
+    top: 252px;
+    width: 206px;
+    height: 100px;
+  }
+
+  .soc-inner {
+    padding: 12px 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .soc-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 48px;
+    font-weight: 900;
+    color: #ffaa00;
+    text-shadow: 0 0 12px rgba(255,170,0,0.3);
+    line-height: 1;
+  }
+
+  .soc-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 18px;
+    color: #887744;
+    margin-left: 2px;
+  }
+
+  /* ====== 电压卡片 ====== */
+  .voltage-card {
+    left: 30px;
+    top: 366px;
+    width: 200px;
+    height: 90px;
+  }
+
+  .voltage-inner {
+    padding: 10px 16px;
+  }
+
+  .voltage-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 30px;
+    font-weight: 700;
+    color: #fff;
+    margin-top: 4px;
+  }
+
+  .voltage-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    color: #888;
+  }
+
+  /* ====== 电流卡片 ====== */
+  .current-card {
+    left: 244px;
+    top: 366px;
+    width: 200px;
+    height: 90px;
+  }
+
+  .current-inner {
+    padding: 10px 16px;
+  }
+
+  .current-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 30px;
+    font-weight: 700;
+    color: #00e060;
+    margin-top: 4px;
+  }
+
+  .current-value.charging-mode {
+    color: #ffaa00;
+  }
+
+  .current-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    color: #888;
+  }
+
+  /* ====== 温度卡片 ====== */
+  .temp-card {
+    left: 30px;
+    top: 468px;
+    width: 190px;
+    height: 80px;
+  }
+
+  .temp-inner {
+    padding: 8px 14px;
+  }
+
+  .temp-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 26px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+
+  .temp-value.normal { color: #fff; }
+  .temp-value.warm { color: #ffaa00; }
+  .temp-value.hot { color: #ff2020; text-shadow: 0 0 8px rgba(255,30,30,0.4); }
+
+  .temp-unit {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    color: #888;
+  }
+
+  /* ====== MOS温度卡片 ====== */
+  .mos-card {
+    left: 234px;
+    top: 468px;
+    width: 190px;
+    height: 80px;
+  }
+
+  .mos-inner {
+    padding: 8px 14px;
+  }
+
+  /* ====== 状态指示卡片 ====== */
+  .status-card {
+    left: 438px;
+    top: 366px;
+    width: 172px;
+    height: 182px;
+  }
+
+  .status-inner {
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+  }
+
+  .status-dot.on { box-shadow: 0 0 8px currentColor; }
+  .status-dot.off { opacity: 0.3; }
+
+  .status-dot.charge { background: #00e060; color: #00e060; }
+  .status-dot.discharge { background: #ffaa00; color: #ffaa00; }
+  .status-dot.balance { background: #4080ff; color: #4080ff; }
+
+  .status-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: #999;
+    letter-spacing: 2px;
+  }
+
+  .status-text.active { color: #fff; }
+
+  /* ====== 侧边发光条 ====== */
+  .side-glow-left, .side-glow-right {
+    position: absolute;
+    top: 60px;
+    bottom: 10px;
+    width: 3px;
+    z-index: 4;
+    pointer-events: none;
+  }
+
+  .side-glow-left {
+    left: 4px;
+    background: linear-gradient(180deg, transparent, var(--power-shadow, rgba(255,50,50,0.3)), transparent);
+  }
+
+  .side-glow-right {
+    right: 4px;
+    background: linear-gradient(180deg, transparent, var(--power-shadow, rgba(255,50,50,0.3)), transparent);
+  }
+
+  /* ====== 底部信息 ====== */
+  .bottom-info {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Orbitron', monospace;
+    font-size: 9px;
+    color: rgba(255,100,100,0.25);
+    letter-spacing: 2px;
+    z-index: 5;
+  }
+
+  /* ====== 控制面板 ====== */
+  .controls {
+    position: relative;
+    z-index: 1;
+    margin-top: 24px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .control-btn {
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 20px;
+    border: 1px solid rgba(255,50,50,0.3);
+    border-radius: 8px;
+    background: rgba(255,20,20,0.1);
+    color: #ff6060;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 1px;
+  }
+
+  .control-btn:hover {
+    background: rgba(255,20,20,0.2);
+    border-color: rgba(255,50,50,0.6);
+    box-shadow: 0 0 12px rgba(255,30,30,0.2);
+  }
+
+  .control-btn.active {
+    background: rgba(255,20,20,0.3);
+    border-color: #ff4040;
+    color: #fff;
+  }
+
+  .power-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .power-slider-wrap label {
+    color: #886666;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .power-slider {
+    -webkit-appearance: none;
+    width: 200px;
+    height: 4px;
+    background: rgba(255,50,50,0.2);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .power-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ff4040;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(255,50,50,0.4);
+  }
+
+  .power-slider-val {
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    color: #ff6060;
+    min-width: 60px;
+  }
+
+  /* ====== 连接状态切换 ====== */
+  .ble-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ble-toggle label {
+    color: #886666;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .toggle-switch {
+    width: 40px;
+    height: 20px;
+    background: rgba(255,50,50,0.2);
+    border-radius: 10px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.3s ease;
+  }
+
+  .toggle-switch.on {
+    background: rgba(0,224,64,0.3);
+  }
+
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ff4040;
+    transition: all 0.3s ease;
+  }
+
+  .toggle-switch.on::after {
+    left: 22px;
+    background: #00e040;
+  }
+
+  /* ====== 断开连接画面 ====== */
+  .disconnected-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10,5,5,0.92);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.5s ease;
+  }
+
+  .disconnected-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .disconnected-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 36px;
+    font-weight: 900;
+    color: #ff2020;
+    text-shadow: 0 0 20px rgba(255,30,30,0.5);
+    letter-spacing: 4px;
+    margin-bottom: 12px;
+  }
+
+  .disconnected-sub {
+    font-size: 16px;
+    color: #886666;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .disconnected-mac {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    color: #553333;
+    letter-spacing: 1px;
+  }
+
+  .loading-spinner {
+    margin-top: 24px;
+    width: 50px;
+    height: 50px;
+    position: relative;
+  }
+
+  .loading-spinner .dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff4040;
+  }
+
+  @keyframes spin-dots {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .loading-spinner {
+    animation: spin-dots 2s linear infinite;
+  }
+
+  .loading-spinner .dot:nth-child(1) { top: 0; left: 50%; transform: translateX(-50%); opacity: 1; }
+  .loading-spinner .dot:nth-child(2) { top: 50%; right: 0; transform: translateY(-50%); opacity: 0.75; }
+  .loading-spinner .dot:nth-child(3) { bottom: 0; left: 50%; transform: translateX(-50%); opacity: 0.5; }
+  .loading-spinner .dot:nth-child(4) { top: 50%; left: 0; transform: translateY(-50%); opacity: 0.25; }
+</style>
+</head>
+<body>
+
+<div class="page-bg"></div>
+<div class="scanline-overlay"></div>
+
+<div class="title-area">
+  <h1>MECHA WARRIOR BMS</h1>
+  <p>ST7789 2.8" 横屏预览 · JK02_32S 协议 · ESP32-32E</p>
+</div>
+
+<div class="screen-wrapper">
+  <div class="screen-frame">
+    <div class="screen-content" id="screen">
+
+      <!-- 断开连接覆盖层 -->
+      <div class="disconnected-overlay" id="disconnectedOverlay">
+        <div class="disconnected-title">机甲战士</div>
+        <div class="disconnected-sub">BMS 蓝牙监控</div>
+        <div class="disconnected-mac">MAC: 98:DA:20:07:B9:00</div>
+        <div class="loading-spinner">
+          <div class="dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+        </div>
+      </div>
+
+      <!-- 粒子背景 -->
+      <div class="particles" id="particles"></div>
+
+      <!-- 角落装饰 -->
+      <div class="corner-decor tl"></div>
+      <div class="corner-decor tr"></div>
+      <div class="corner-decor bl"></div>
+      <div class="corner-decor br"></div>
+
+      <!-- 侧边发光条 -->
+      <div class="side-glow-left"></div>
+      <div class="side-glow-right"></div>
+
+      <!-- 顶部标题栏 -->
+      <div class="header">
+        <span class="header-decor-left">JK-BD4A24S10P</span>
+        <span class="header-title">机甲战士 BMS</span>
+        <span class="header-decor-right">JK02_32S</span>
+      </div>
+
+      <!-- 蓝牙状态 -->
+      <div class="ble-status">
+        <span class="ble-label" id="bleLabel">BLE</span>
+        <div class="ble-dot connected" id="bleDot"></div>
+      </div>
+
+      <!-- 功率主显示 -->
+      <div class="card power-card" id="powerCard">
+        <div class="card-glow"></div>
+        <div class="power-pulse"></div>
+        <div class="power-pulse"></div>
+        <div class="power-pulse"></div>
+        <div class="power-inner">
+          <div class="power-label">实 时 放 电 功 率</div>
+          <div class="power-value-row">
+            <span class="power-value" id="powerValue">0.0</span>
+            <span class="power-unit">W</span>
+          </div>
+          <div class="power-status discharging" id="powerStatus">放电中</div>
+        </div>
+        <div class="power-bar-container">
+          <div class="power-bar-fill" id="powerBar" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- 容量卡片 -->
+      <div class="card capacity-card">
+        <div class="card-glow"></div>
+        <div class="capacity-inner">
+          <div class="card-label">已用 / 总容量</div>
+          <div class="capacity-row">
+            <span class="capacity-value" id="remainValue">45.20</span>
+            <span class="capacity-sep">/</span>
+            <span class="capacity-total" id="totalValue">100.00</span>
+            <span class="capacity-unit">Ah</span>
+          </div>
+          <div class="capacity-bar">
+            <div class="capacity-bar-fill" id="capacityBar" style="width: 45%"></div>
+          </div>
+        </div>
+        <span class="capacity-percent" id="socInCapacity">45%</span>
+      </div>
+
+      <!-- SOC卡片 -->
+      <div class="card soc-card">
+        <div class="card-glow"></div>
+        <div class="soc-inner">
+          <div class="card-label" style="position:absolute;top:12px;left:18px;">电量</div>
+          <div style="display:flex;align-items:baseline;gap:2px;">
+            <span class="soc-value" id="socValue">45</span>
+            <span class="soc-unit">%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 电压卡片 -->
+      <div class="card voltage-card">
+        <div class="card-glow"></div>
+        <div class="voltage-inner">
+          <div class="card-label">电池电压</div>
+          <div>
+            <span class="voltage-value" id="voltageValue">51.20</span>
+            <span class="voltage-unit">V</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 电流卡片 -->
+      <div class="card current-card">
+        <div class="card-glow"></div>
+        <div class="current-inner">
+          <div class="card-label">充放电流</div>
+          <div>
+            <span class="current-value" id="currentValue">24.50</span>
+            <span class="current-unit">A</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 温度卡片 -->
+      <div class="card temp-card">
+        <div class="card-glow"></div>
+        <div class="temp-inner">
+          <div class="card-label">电芯温度</div>
+          <div>
+            <span class="temp-value normal" id="tempValue">28.5</span>
+            <span class="temp-unit">°C</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MOS温度卡片 -->
+      <div class="card mos-card">
+        <div class="card-glow"></div>
+        <div class="mos-inner">
+          <div class="card-label">MOS温度</div>
+          <div>
+            <span class="temp-value normal" id="mosValue">35.2</span>
+            <span class="temp-unit">°C</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 状态指示卡片 -->
+      <div class="card status-card">
+        <div class="card-glow"></div>
+        <div class="status-inner">
+          <div class="card-label">运行状态</div>
+          <div class="status-item">
+            <div class="status-dot charge on" id="chargeDot"></div>
+            <span class="status-text active" id="chargeText">充电 开</span>
+          </div>
+          <div class="status-item">
+            <div class="status-dot discharge on" id="dischargeDot"></div>
+            <span class="status-text active" id="dischargeText">放电 开</span>
+          </div>
+          <div class="status-item">
+            <div class="status-dot balance" id="balanceDot"></div>
+            <span class="status-text" id="balanceText">均衡 关</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部信息 -->
+      <div class="bottom-info">ST7789 320x240 MECHA WARRIOR v1.0</div>
+
+    </div>
+  </div>
+</div>
+
+<!-- 控制面板 -->
+<div class="controls">
+  <div class="ble-toggle">
+    <label>蓝牙连接</label>
+    <div class="toggle-switch on" id="bleToggle" onclick="toggleBLE()"></div>
+  </div>
+
+  <div class="power-slider-wrap">
+    <label>模拟功率</label>
+    <input type="range" class="power-slider" id="powerSlider" min="0" max="3000" value="800" oninput="updatePower(this.value)">
+    <span class="power-slider-val" id="sliderVal">800W</span>
+  </div>
+
+  <button class="control-btn" onclick="simulateCharging()">模拟充电</button>
+  <button class="control-btn" onclick="simulateDischarging()">模拟放电</button>
+  <button class="control-btn" onclick="simulateIdle()">模拟待机</button>
+</div>
+
+<script>
+  // ====== 状态变量 ======
+  let isConnected = true;
+  let currentPower = 800;
+  let isCharging = false;
+  let isDischarging = true;
+  let animFrame = null;
+
+  // ====== 初始化粒子 ======
+  function initParticles() {
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 20; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      p.style.left = Math.random() * 640 + 'px';
+      p.style.animationDuration = (4 + Math.random() * 6) + 's';
+      p.style.animationDelay = Math.random() * 5 + 's';
+      p.style.width = (1 + Math.random() * 2) + 'px';
+      p.style.height = p.style.width;
+      container.appendChild(p);
+    }
+  }
+
+  // ====== 功率颜色计算 ======
+  function getPowerStyle(power) {
+    if (power < 100) {
+      return { color: '#00ccff', shadow: 'rgba(0,200,255,0.4)', glow: 'rgba(0,200,255,0.5)' };
+    } else if (power < 500) {
+      const r = (power - 100) / 400;
+      return {
+        color: lerpColor('#00ccff', '#00ff80', r),
+        shadow: lerpColor('rgba(0,200,255,0.4)', 'rgba(0,255,128,0.4)', r),
+        glow: lerpColor('rgba(0,200,255,0.5)', 'rgba(0,255,128,0.5)', r)
+      };
+    } else if (power < 1500) {
+      const r = (power - 500) / 1000;
+      return {
+        color: lerpColor('#00ff80', '#ffcc00', r),
+        shadow: lerpColor('rgba(0,255,128,0.4)', 'rgba(255,200,0,0.4)', r),
+        glow: lerpColor('rgba(0,255,128,0.5)', 'rgba(255,200,0,0.5)', r)
+      };
+    } else {
+      const r = Math.min((power - 1500) / 1500, 1);
+      return {
+        color: lerpColor('#ffcc00', '#ff2020', r),
+        shadow: lerpColor('rgba(255,200,0,0.4)', 'rgba(255,30,30,0.5)', r),
+        glow: lerpColor('rgba(255,200,0,0.5)', 'rgba(255,30,30,0.6)', r)
+      };
+    }
+  }
+
+  function lerpColor(a, b, t) {
+    const ah = parseInt(a.replace(/#/g, ''), 16);
+    const ar = ah >> 16, ag = (ah >> 8) & 0xff, ab = ah & 0xff;
+    if (a.startsWith('rgba')) {
+      const pa = a.match(/[\d.]+/g).map(Number);
+      const pb = b.match(/[\d.]+/g).map(Number);
+      return `rgba(${Math.round(pa[0]+(pb[0]-pa[0])*t)},${Math.round(pa[1]+(pb[1]-pa[1])*t)},${Math.round(pa[2]+(pb[2]-pa[2])*t)},${(pa[3]+(pb[3]-pa[3])*t).toFixed(2)})`;
+    }
+    const bh = parseInt(b.replace(/#/g, ''), 16);
+    const br = bh >> 16, bg = (bh >> 8) & 0xff, bb = bh & 0xff;
+    const rr = ar + (br - ar) * t;
+    const rg = ag + (bg - ag) * t;
+    const rb = ab + (bb - ab) * t;
+    return `#${((1<<24)+(rr<<16)+(rg<<8)+rb|0).toString(16).slice(1)}`;
+  }
+
+  // ====== 更新UI ======
+  function updateUI() {
+    const style = getPowerStyle(currentPower);
+    const root = document.documentElement;
+
+    root.style.setProperty('--power-color', style.color);
+    root.style.setProperty('--power-shadow', style.shadow);
+    root.style.setProperty('--power-glow', style.glow);
+
+    document.getElementById('powerValue').textContent = currentPower.toFixed(1);
+    document.getElementById('powerBar').style.width = Math.min(currentPower / 3000 * 100, 100) + '%';
+
+    const statusEl = document.getElementById('powerStatus');
+    if (isCharging) {
+      statusEl.textContent = '充电中';
+      statusEl.className = 'power-status charging';
+    } else if (isDischarging && currentPower > 10) {
+      statusEl.textContent = '放电中';
+      statusEl.className = 'power-status discharging';
+    } else {
+      statusEl.textContent = '待机中';
+      statusEl.className = 'power-status idle';
+    }
+
+    // 模拟数据联动
+    const soc = Math.max(10, Math.min(100, Math.round(45 + (currentPower / 3000) * 30)));
+    const remain = (soc / 100 * 100).toFixed(2);
+    const voltage = (48 + soc / 100 * 8).toFixed(2);
+    const current = isCharging ? -(currentPower / parseFloat(voltage)).toFixed(2) : (currentPower / parseFloat(voltage)).toFixed(2);
+    const temp = (25 + currentPower / 200).toFixed(1);
+    const mosTemp = (30 + currentPower / 150).toFixed(1);
+
+    document.getElementById('socValue').textContent = soc;
+    document.getElementById('socInCapacity').textContent = soc + '%';
+    document.getElementById('remainValue').textContent = remain;
+    document.getElementById('capacityBar').style.width = (100 - soc) + '%';
+    document.getElementById('voltageValue').textContent = voltage;
+    document.getElementById('currentValue').textContent = Math.abs(parseFloat(current)).toFixed(2);
+
+    const currentEl = document.getElementById('currentValue');
+    if (isCharging) {
+      currentEl.classList.add('charging-mode');
+    } else {
+      currentEl.classList.remove('charging-mode');
+    }
+
+    const tempEl = document.getElementById('tempValue');
+    const tempVal = parseFloat(temp);
+    tempEl.textContent = temp;
+    tempEl.className = 'temp-value ' + (tempVal > 40 ? 'hot' : tempVal > 30 ? 'warm' : 'normal');
+
+    const mosEl = document.getElementById('mosValue');
+    const mosVal = parseFloat(mosTemp);
+    mosEl.textContent = mosTemp;
+    mosEl.className = 'temp-value ' + (mosVal > 50 ? 'hot' : mosVal > 40 ? 'warm' : 'normal');
+  }
+
+  // ====== 控制函数 ======
+  function updatePower(val) {
+    currentPower = parseFloat(val);
+    document.getElementById('sliderVal').textContent = Math.round(val) + 'W';
+    updateUI();
+  }
+
+  function toggleBLE() {
+    isConnected = !isConnected;
+    const toggle = document.getElementById('bleToggle');
+    const dot = document.getElementById('bleDot');
+    const label = document.getElementById('bleLabel');
+    const overlay = document.getElementById('disconnectedOverlay');
+
+    if (isConnected) {
+      toggle.classList.add('on');
+      dot.classList.remove('disconnected');
+      dot.classList.add('connected');
+      label.classList.remove('off');
+      overlay.classList.add('hidden');
+    } else {
+      toggle.classList.remove('on');
+      dot.classList.remove('connected');
+      dot.classList.add('disconnected');
+      label.classList.add('off');
+      overlay.classList.remove('hidden');
+    }
+  }
+
+  function simulateCharging() {
+    isCharging = true;
+    isDischarging = false;
+    currentPower = 500;
+    document.getElementById('powerSlider').value = 500;
+    document.getElementById('sliderVal').textContent = '500W';
+    updateUI();
+  }
+
+  function simulateDischarging() {
+    isCharging = false;
+    isDischarging = true;
+    currentPower = 1200;
+    document.getElementById('powerSlider').value = 1200;
+    document.getElementById('sliderVal').textContent = '1200W';
+    updateUI();
+  }
+
+  function simulateIdle() {
+    isCharging = false;
+    isDischarging = false;
+    currentPower = 5;
+    document.getElementById('powerSlider').value = 5;
+    document.getElementById('sliderVal').textContent = '5W';
+    updateUI();
+  }
+
+  // ====== 均衡闪烁 ======
+  let balanceBlink = false;
+  setInterval(() => {
+    balanceBlink = !balanceBlink;
+    const dot = document.getElementById('balanceDot');
+    const text = document.getElementById('balanceText');
+    if (currentPower > 500) {
+      dot.classList.toggle('on', balanceBlink);
+      text.classList.toggle('active', balanceBlink);
+      text.textContent = balanceBlink ? '均衡 开' : '均衡 关';
+    } else {
+      dot.classList.remove('on');
+      text.classList.remove('active');
+      text.textContent = '均衡 关';
+    }
+  }, 600);
+
+  // ====== 动态数据波动 ======
+  setInterval(() => {
+    if (!isConnected) return;
+    const fluctuation = (Math.random() - 0.5) * 20;
+    const displayPower = Math.max(0, currentPower + fluctuation);
+    document.getElementById('powerValue').textContent = displayPower.toFixed(1);
+  }, 500);
+
+  // ====== 初始化 ======
+  initParticles();
+  updateUI();
+
+  // 3秒后自动"连接"
+  setTimeout(() => {
+    document.getElementById('disconnectedOverlay').classList.add('hidden');
+  }, 2000);
+</script>
+
+</body>
+</html>
