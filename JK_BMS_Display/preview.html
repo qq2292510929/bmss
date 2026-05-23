@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JK-BMS 显示屏效果预览</title>
+    <title>JK-BMS 红色战斗风格预览</title>
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: linear-gradient(135deg, #1a0000 0%, #0d0000 100%);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -27,10 +27,11 @@
             text-align: center;
             margin-bottom: 30px;
             font-size: 2rem;
-            background: linear-gradient(90deg, #00E5FF, #00E676);
+            background: linear-gradient(90deg, #FF0000, #FF4444);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            text-shadow: 0 0 30px rgba(255, 0, 0, 0.5);
         }
 
         .container {
@@ -46,18 +47,43 @@
             background: #000;
             padding: 15px;
             border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
-                        0 0 0 2px #333;
+            box-shadow: 0 20px 60px rgba(255, 0, 0, 0.3),
+                        0 0 0 2px #330000;
         }
 
         .screen {
             width: 320px;
             height: 240px;
-            background: #0A0A2E;
+            background: #000000;
             border-radius: 5px;
             position: relative;
             overflow: hidden;
             font-family: monospace;
+        }
+
+        /* 红色顶部装饰条 */
+        .top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #FF0000, #FF4444, #FF0000);
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+        }
+
+        /* 战斗网格背景 */
+        .grid-overlay {
+            position: absolute;
+            top: 30px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(80, 0, 0, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(80, 0, 0, 0.3) 1px, transparent 1px);
+            background-size: 40px 30px;
+            pointer-events: none;
         }
 
         /* 标题栏 */
@@ -67,12 +93,16 @@
             align-items: center;
             padding: 8px 12px;
             height: 32px;
+            position: relative;
+            z-index: 1;
         }
 
         .title {
             font-size: 14px;
-            color: #FFFFFF;
-            font-weight: 600;
+            color: #FF0000;
+            font-weight: 700;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+            letter-spacing: 1px;
         }
 
         .bt-status {
@@ -102,70 +132,86 @@
 
         .bt-disconnected .bt-icon,
         .bt-disconnected .bt-text {
-            color: #FF5252;
+            color: #FF0000;
         }
 
-        /* 功率卡片 */
+        /* 功率卡片 - 红色战斗风格 */
         .power-card {
             position: absolute;
             top: 32px;
-            left: 12px;
-            right: 12px;
-            height: 90px;
-            background: #003344;
-            border-radius: 12px;
-            border: 1px solid #2A2A6A;
+            left: 10px;
+            right: 10px;
+            height: 95px;
+            background: linear-gradient(135deg, #1a0000 0%, #280000 100%);
+            border-radius: 8px;
+            border: 1px solid #600000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(255, 0, 0, 0.1);
         }
 
         .power-card::before {
             content: '';
             position: absolute;
             inset: 1px;
-            border-radius: 11px;
-            border: 1px solid rgba(0, 229, 255, 0.2);
+            border-radius: 7px;
+            border: 1px solid rgba(255, 0, 0, 0.3);
             pointer-events: none;
         }
 
         .power-label {
             font-size: 10px;
-            color: #B0B0D0;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            color: #A80000;
+            letter-spacing: 2px;
             margin-bottom: 5px;
-        }
-
-        .power-value {
-            font-size: 28px;
-            font-weight: bold;
-            color: #00E5FF;
-            text-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
-        }
-
-        .power-status {
-            font-size: 11px;
-            margin-top: 5px;
             font-weight: 600;
         }
 
-        .charging { color: #00E676; }
-        .discharging { color: #FFAB40; }
-        .idle { color: #B0B0D0; }
+        .power-value {
+            font-size: 32px;
+            font-weight: bold;
+            text-shadow: 0 0 20px currentColor, 0 0 40px currentColor;
+            transition: color 0.3s ease;
+        }
+
+        .power-unit {
+            font-size: 14px;
+            color: #A80000;
+            margin-left: 5px;
+        }
+
+        /* 功率条 */
+        .power-bar-container {
+            position: absolute;
+            bottom: 10px;
+            left: 12px;
+            right: 12px;
+            height: 6px;
+            background: #300000;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .power-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease, background 0.3s ease;
+            box-shadow: 0 0 10px currentColor;
+        }
 
         /* 电压电流条 */
         .vi-bar {
             position: absolute;
-            top: 130px;
-            left: 12px;
-            right: 12px;
-            height: 34px;
-            background: #151540;
-            border-radius: 8px;
-            border: 1px solid #2A2A6A;
+            top: 132px;
+            left: 10px;
+            right: 10px;
+            height: 38px;
+            background: linear-gradient(135deg, #1a0000 0%, #280000 100%);
+            border-radius: 6px;
+            border: 1px solid #600000;
             display: flex;
             overflow: hidden;
         }
@@ -191,8 +237,8 @@
 
         .vi-label {
             font-size: 8px;
-            color: #B0B0D0;
-            text-transform: uppercase;
+            color: #A80000;
+            font-weight: 600;
         }
 
         .vi-value {
@@ -200,8 +246,8 @@
             font-weight: bold;
         }
 
-        .voltage-value { color: #E040FB; }
-        .current-value { color: #FF5252; }
+        .voltage-value { color: #FF0000; text-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
+        .current-value { transition: color 0.3s ease; text-shadow: 0 0 10px currentColor; }
 
         .divider {
             position: absolute;
@@ -209,7 +255,7 @@
             top: 6px;
             bottom: 6px;
             width: 1px;
-            background: #2A2A6A;
+            background: #600000;
         }
 
         .direction-arrow {
@@ -218,26 +264,27 @@
             top: 50%;
             transform: translate(-50%, -50%);
             font-size: 12px;
+            font-weight: bold;
         }
 
         /* 底部卡片容器 */
         .bottom-cards {
             position: absolute;
-            top: 172px;
-            left: 12px;
-            right: 12px;
-            height: 60px;
+            top: 175px;
+            left: 10px;
+            right: 10px;
+            height: 58px;
             display: flex;
             gap: 8px;
         }
 
         /* 容量卡片 */
         .capacity-card {
-            flex: 148;
-            background: #003311;
-            border-radius: 10px;
-            border: 1px solid #2A2A6A;
-            padding: 6px 10px;
+            flex: 150;
+            background: linear-gradient(135deg, #1a0000 0%, #280000 100%);
+            border-radius: 6px;
+            border: 1px solid #600000;
+            padding: 5px 10px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -245,8 +292,8 @@
 
         .card-label {
             font-size: 8px;
-            color: #B0B0D0;
-            text-transform: uppercase;
+            color: #A80000;
+            font-weight: 600;
         }
 
         .capacity-main {
@@ -258,22 +305,23 @@
         .soc-value {
             font-size: 18px;
             font-weight: bold;
-            color: #00E676;
+            color: #FF0000;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
         }
 
         .cap-detail {
             font-size: 9px;
-            color: #B0B0D0;
+            color: #A80000;
             text-align: right;
         }
 
         /* 温度卡片 */
         .temp-card {
-            flex: 136;
-            background: #331100;
-            border-radius: 10px;
-            border: 1px solid #2A2A6A;
-            padding: 6px 10px;
+            flex: 140;
+            background: linear-gradient(135deg, #1a0000 0%, #280000 100%);
+            border-radius: 6px;
+            border: 1px solid #600000;
+            padding: 5px 10px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -288,19 +336,20 @@
         .temp-value {
             font-size: 18px;
             font-weight: bold;
-            color: #FFAB40;
+            transition: color 0.3s ease;
+            text-shadow: 0 0 10px currentColor;
         }
 
         .mos-temp {
             font-size: 9px;
-            color: #B0B0D0;
+            color: #A80000;
             text-align: right;
         }
 
         /* 进度条通用 */
         .progress-bar {
             height: 8px;
-            background: #1A1A4E;
+            background: #300000;
             border-radius: 4px;
             overflow: hidden;
         }
@@ -308,30 +357,24 @@
         .progress-fill {
             height: 100%;
             border-radius: 3px;
-            transition: width 0.5s ease;
-        }
-
-        .progress-fill.green {
-            background: linear-gradient(90deg, #00E676, #00C853);
-        }
-
-        .progress-fill.orange {
-            background: linear-gradient(90deg, #FFAB40, #FF6D00);
+            transition: width 0.5s ease, background 0.3s ease;
+            box-shadow: 0 0 8px currentColor;
         }
 
         /* 控制面板 */
         .controls {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 0, 0, 0.05);
             padding: 25px;
             border-radius: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 0, 0, 0.2);
             min-width: 300px;
         }
 
         .controls h2 {
             font-size: 1.1rem;
             margin-bottom: 15px;
-            color: #00E5FF;
+            color: #FF0000;
+            text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
         }
 
         .control-group {
@@ -342,18 +385,19 @@
             display: block;
             margin-bottom: 5px;
             font-size: 0.85rem;
-            color: #B0B0D0;
+            color: #A80000;
         }
 
         .control-group input[type="range"] {
             width: 100%;
             margin-bottom: 5px;
+            accent-color: #FF0000;
         }
 
         .control-value {
             text-align: right;
             font-size: 0.9rem;
-            color: #00E676;
+            color: #FF0000;
             font-weight: 600;
         }
 
@@ -387,24 +431,24 @@
         }
 
         .status-toggle button#btn-discharge {
-            border-color: #FFAB40;
-            color: #FFAB40;
+            border-color: #FF0000;
+            color: #FF0000;
         }
 
         .status-toggle button#btn-discharge:hover,
         .status-toggle button#btn-discharge.active {
-            background: #FFAB40;
+            background: #FF0000;
             color: #000;
         }
 
         .status-toggle button#btn-idle {
-            border-color: #B0B0D0;
-            color: #B0B0D0;
+            border-color: #A80000;
+            color: #A80000;
         }
 
         .status-toggle button#btn-idle:hover,
         .status-toggle button#btn-idle.active {
-            background: #B0B0D0;
+            background: #A80000;
             color: #000;
         }
 
@@ -435,12 +479,12 @@
         }
 
         .bt-toggle button#btn-disconnect {
-            border-color: #FF5252;
-            color: #FF5252;
+            border-color: #FF0000;
+            color: #FF0000;
         }
 
         .bt-toggle button#btn-disconnect:hover {
-            background: #FF5252;
+            background: #FF0000;
             color: #000;
         }
 
@@ -448,7 +492,7 @@
         .info {
             margin-top: 30px;
             text-align: center;
-            color: #B0B0D0;
+            color: #A80000;
             font-size: 0.9rem;
             max-width: 600px;
         }
@@ -463,15 +507,18 @@
     </style>
 </head>
 <body>
-    <h1>JK-BMS 显示屏效果预览</h1>
+    <h1>JK-BMS 红色战斗风格预览</h1>
 
     <div class="container">
         <!-- 模拟屏幕 -->
         <div class="screen-wrapper">
             <div class="screen" id="screen">
+                <div class="top-bar"></div>
+                <div class="grid-overlay"></div>
+
                 <!-- 标题栏 -->
                 <div class="header">
-                    <div class="title">JK-BMS Monitor</div>
+                    <div class="title">JK-BMS COMBAT</div>
                     <div class="bt-status bt-connected" id="bt-status">
                         <div class="bt-icon">📡</div>
                         <div class="bt-text" id="bt-text">ONLINE</div>
@@ -480,21 +527,26 @@
 
                 <!-- 功率卡片 -->
                 <div class="power-card">
-                    <div class="power-label">REAL-TIME POWER</div>
-                    <div class="power-value" id="power-value">1250 W</div>
-                    <div class="power-status discharging" id="power-status">DISCHARGING</div>
+                    <div class="power-label">实时功率</div>
+                    <div style="display: flex; align-items: baseline;">
+                        <div class="power-value" id="power-value">1250</div>
+                        <div class="power-unit" id="power-unit">W</div>
+                    </div>
+                    <div class="power-bar-container">
+                        <div class="power-bar-fill" id="power-bar" style="width: 25%; background: #FF0000;"></div>
+                    </div>
                 </div>
 
                 <!-- 电压电流条 -->
                 <div class="vi-bar">
                     <div class="vi-section">
-                        <div class="vi-label">VOLTAGE</div>
+                        <div class="vi-label">总电压</div>
                         <div class="vi-value voltage-value" id="voltage-value">52.50V</div>
                     </div>
                     <div class="divider"></div>
-                    <div class="direction-arrow" id="direction-arrow">↓</div>
+                    <div class="direction-arrow" id="direction-arrow" style="color: #FF0000;">▼</div>
                     <div class="vi-section">
-                        <div class="vi-label">CURRENT</div>
+                        <div class="vi-label">电流</div>
                         <div class="vi-value current-value" id="current-value">-23.80A</div>
                     </div>
                 </div>
@@ -502,23 +554,23 @@
                 <!-- 底部卡片 -->
                 <div class="bottom-cards">
                     <div class="capacity-card">
-                        <div class="card-label">CAPACITY</div>
+                        <div class="card-label">电池容量</div>
                         <div class="capacity-main">
                             <div class="soc-value" id="soc-value">85%</div>
                             <div class="cap-detail" id="cap-detail">85.0/100Ah</div>
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill green" id="soc-bar" style="width: 85%"></div>
+                            <div class="progress-fill" id="soc-bar" style="width: 85%; background: #FF0000;"></div>
                         </div>
                     </div>
                     <div class="temp-card">
-                        <div class="card-label">TEMPERATURE</div>
+                        <div class="card-label">电池温度</div>
                         <div class="temp-main">
-                            <div class="temp-value" id="temp-value">28.5 C</div>
+                            <div class="temp-value" id="temp-value" style="color: #FF0000;">28.5C</div>
                             <div class="mos-temp" id="mos-temp">MOS:32C</div>
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill orange" id="temp-bar" style="width: 60%"></div>
+                            <div class="progress-fill" id="temp-bar" style="width: 60%; background: #FF0000;"></div>
                         </div>
                     </div>
                 </div>
@@ -527,11 +579,11 @@
 
         <!-- 控制面板 -->
         <div class="controls">
-            <h2>🎮 交互控制</h2>
+            <h2>交互控制</h2>
 
             <div class="control-group">
                 <label>功率 (W)</label>
-                <input type="range" id="power-slider" min="0" max="3000" value="1250" step="50">
+                <input type="range" id="power-slider" min="0" max="5000" value="1250" step="50">
                 <div class="control-value"><span id="power-slider-val">1250</span> W</div>
             </div>
 
@@ -554,9 +606,9 @@
             </div>
 
             <div class="control-group">
-                <label>温度 (°C)</label>
+                <label>温度 (C)</label>
                 <input type="range" id="temp-slider" min="10" max="60" value="28.5" step="0.5">
-                <div class="control-value"><span id="temp-slider-val">28.5</span> °C</div>
+                <div class="control-value"><span id="temp-slider-val">28.5</span> C</div>
             </div>
 
             <div class="control-group">
@@ -576,7 +628,7 @@
     </div>
 
     <div class="info">
-        <p>📱 这是 JK-BMS 监控显示器的效果模拟。</p>
+        <p>这是 JK-BMS 监控显示器的红色战斗风格效果模拟。</p>
         <p>使用右侧控制面板可以调整各项参数，实时预览显示效果！</p>
     </div>
 
@@ -589,13 +641,52 @@
             soc: 85,
             temp: 28.5,
             mosTemp: 32,
-            status: 'discharging', // charging, discharging, idle
+            status: 'discharging',
             connected: true
         };
 
+        // 获取功率颜色（战斗风格）
+        function getPowerColor(power) {
+            if (power < 0) return '#00E676'; // 充电绿色
+            const maxPower = 5000;
+            const ratio = Math.min(Math.max(power / maxPower, 0), 1);
+            
+            if (ratio < 0.33) {
+                // 黄到橙
+                const localRatio = ratio / 0.33;
+                const r = 255;
+                const g = Math.round(224 * (1 - localRatio));
+                const b = 0;
+                return `rgb(${r},${g},${b})`;
+            } else if (ratio < 0.66) {
+                // 橙到红橙
+                const localRatio = (ratio - 0.33) / 0.33;
+                const r = 255;
+                const g = Math.round(128 * (1 - localRatio));
+                const b = 0;
+                return `rgb(${r},${g},${b})`;
+            } else {
+                // 红橙到红
+                const localRatio = (ratio - 0.66) / 0.34;
+                const r = 255;
+                const g = Math.round(64 * (1 - localRatio));
+                const b = 0;
+                return `rgb(${r},${g},${b})`;
+            }
+        }
+
+        // 获取温度颜色
+        function getTempColor(temp) {
+            if (temp < 20) return '#00E676';
+            if (temp < 35) return '#FFE000';
+            if (temp < 45) return '#FF8000';
+            return '#FF0000';
+        }
+
         // DOM元素
         const powerValue = document.getElementById('power-value');
-        const powerStatus = document.getElementById('power-status');
+        const powerUnit = document.getElementById('power-unit');
+        const powerBar = document.getElementById('power-bar');
         const voltageValue = document.getElementById('voltage-value');
         const currentValue = document.getElementById('current-value');
         const socValue = document.getElementById('soc-value');
@@ -630,16 +721,27 @@
 
         // 更新显示
         function updateDisplay() {
+            const powerColor = getPowerColor(state.power);
+            
             // 功率
-            if (state.power >= 1000) {
-                powerValue.textContent = (state.power / 1000).toFixed(2) + ' kW';
+            if (Math.abs(state.power) >= 1000) {
+                powerValue.textContent = (Math.abs(state.power) / 1000).toFixed(2);
+                powerUnit.textContent = 'kW';
             } else {
-                powerValue.textContent = Math.round(state.power) + ' W';
+                powerValue.textContent = Math.round(Math.abs(state.power));
+                powerUnit.textContent = 'W';
             }
+            powerValue.style.color = powerColor;
+            
+            const powerPercent = Math.min(Math.abs(state.power) / 5000 * 100, 100);
+            powerBar.style.width = powerPercent + '%';
+            powerBar.style.background = powerColor;
+            powerBar.style.boxShadow = `0 0 10px ${powerColor}`;
 
             // 电压电流
             voltageValue.textContent = state.voltage.toFixed(2) + 'V';
             currentValue.textContent = (state.current > 0 ? '+' : '') + state.current.toFixed(2) + 'A';
+            currentValue.style.color = getPowerColor(state.current * -100);
 
             // SOC
             socValue.textContent = state.soc + '%';
@@ -648,28 +750,25 @@
             capDetail.textContent = remainAh.toFixed(1) + '/100Ah';
 
             // 温度
-            tempValue.textContent = state.temp.toFixed(1) + ' C';
-            const tempPercent = ((state.temp - 10) / 50) * 100;
-            tempBar.style.width = Math.max(10, Math.min(100, tempPercent)) + '%';
+            const tempColor = getTempColor(state.temp);
+            tempValue.textContent = state.temp.toFixed(1) + 'C';
+            tempValue.style.color = tempColor;
+            const tempPercent = ((state.temp + 20) / 80) * 100;
+            tempBar.style.width = Math.max(0, Math.min(100, tempPercent)) + '%';
+            tempBar.style.background = tempColor;
+            tempBar.style.boxShadow = `0 0 8px ${tempColor}`;
             mosTemp.textContent = 'MOS:' + state.mosTemp + 'C';
 
             // 方向箭头
             if (state.status === 'charging') {
-                directionArrow.textContent = '↑';
+                directionArrow.textContent = '▲';
+                directionArrow.style.color = '#00E676';
             } else if (state.status === 'discharging') {
-                directionArrow.textContent = '↓';
+                directionArrow.textContent = '▼';
+                directionArrow.style.color = '#FF0000';
             } else {
                 directionArrow.textContent = '●';
-            }
-
-            // 功率状态
-            powerStatus.className = 'power-status ' + state.status;
-            if (state.status === 'charging') {
-                powerStatus.textContent = 'CHARGING';
-            } else if (state.status === 'discharging') {
-                powerStatus.textContent = 'DISCHARGING';
-            } else {
-                powerStatus.textContent = 'IDLE';
+                directionArrow.style.color = '#A80000';
             }
 
             // 蓝牙状态
@@ -693,7 +792,6 @@
             btnDischarge.classList.toggle('active', newStatus === 'discharging');
             btnIdle.classList.toggle('active', newStatus === 'idle');
 
-            // 自动调整电流符号
             if (newStatus === 'charging' && state.current < 0) {
                 state.current = Math.abs(state.current);
                 currentSlider.value = state.current;
@@ -731,7 +829,6 @@
             state.current = parseFloat(e.target.value);
             currentSliderVal.textContent = state.current.toFixed(2);
 
-            // 自动更新状态
             if (state.current > 0.1) {
                 state.status = 'charging';
                 btnCharge.classList.add('active');
@@ -749,7 +846,6 @@
                 btnIdle.classList.add('active');
             }
 
-            // 更新功率
             state.power = Math.abs(state.voltage * state.current);
             powerSlider.value = state.power;
             powerSliderVal.textContent = Math.round(state.power);

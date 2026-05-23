@@ -37,32 +37,32 @@
 #define CMD_DEVICE_INFO     0x97
 #define CMD_CELL_INFO       0x96
 
-// ============== COMBAT STYLE COLORS (16-bit RGB565) ==============
-// Background - deep black with blue tint
+// ============== RED COMBAT STYLE COLORS (16-bit RGB565) ==============
+// Background - deep black with red tint
 #define COLOR_BG            0x0000  // Pure black base
-#define COLOR_BG_DARK       0x0808  // Very dark gray
-#define COLOR_BG_PANEL      0x1082  // Dark blue-gray
+#define COLOR_BG_DARK       0x0800  // Very dark red
+#define COLOR_BG_PANEL      0x3000  // Dark red-gray
 
-// Neon accent colors
-#define COLOR_NEON_BLUE     0x07FF  // Cyan neon
-#define COLOR_NEON_GREEN    0x07E0  // Green neon
+// Neon accent colors - RED THEME
+#define COLOR_NEON_BLUE     0xF800  // Red (replaces blue)
+#define COLOR_NEON_GREEN    0x07E0  // Green neon (keep for charging)
 #define COLOR_NEON_YELLOW   0xFFE0  // Yellow neon
 #define COLOR_NEON_ORANGE   0xFC00  // Orange neon
 #define COLOR_NEON_RED      0xF800  // Red neon
 #define COLOR_NEON_PURPLE   0xF81F  // Purple neon
 #define COLOR_NEON_WHITE    0xFFFF  // White
 
-// Combat theme colors
-#define COLOR_COMBAT_DARK   0x2104  // Dark panel
-#define COLOR_COMBAT_MID    0x4208  // Mid panel
-#define COLOR_COMBAT_LIGHT  0x632C  // Light panel
-#define COLOR_BORDER        0x3186  // Border color
-#define COLOR_BORDER_GLOW   0x4A69  // Glowing border
+// Combat theme colors - RED
+#define COLOR_COMBAT_DARK   0x2800  // Dark red panel
+#define COLOR_COMBAT_MID    0x5000  // Mid red panel
+#define COLOR_COMBAT_LIGHT  0x7800  // Light red panel
+#define COLOR_BORDER        0x6000  // Red border
+#define COLOR_BORDER_GLOW   0x9000  // Red glowing border
 
 // Text colors
 #define COLOR_TEXT_WHITE    0xFFFF
-#define COLOR_TEXT_GRAY     0x8410
-#define COLOR_TEXT_DIM      0x4208
+#define COLOR_TEXT_GRAY     0xA800  // Red-gray
+#define COLOR_TEXT_DIM      0x5000
 
 // ============== GLOBAL OBJECTS ==============
 TFT_eSPI tft = TFT_eSPI();
@@ -371,17 +371,17 @@ void drawCombatBackground() {
     tft.drawLine(0, i, SCREEN_WIDTH, i, gridColor);
   }
 
-  // Top accent bar
-  tft.fillRect(0, 0, SCREEN_WIDTH, 3, COLOR_NEON_BLUE);
+  // Top accent bar - RED
+  tft.fillRect(0, 0, SCREEN_WIDTH, 3, COLOR_NEON_RED);
 
   bgDrawn = true;
 }
 
 // ============== DRAW HEADER ==============
 void drawHeader() {
-  // Title with combat style
+  // Title with RED combat style
   tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_NEON_BLUE, COLOR_BG);
+  tft.setTextColor(COLOR_NEON_RED, COLOR_BG);
   tft.setTextSize(1);
   tft.drawString("JK-BMS COMBAT", 12, 8, 2);
 
@@ -458,7 +458,7 @@ void drawVoltageCurrentBar() {
 
   // Voltage (left)
   tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_NEON_PURPLE, COLOR_COMBAT_DARK);
+  tft.setTextColor(COLOR_NEON_RED, COLOR_COMBAT_DARK);
   char voltStr[16];
   snprintf(voltStr, sizeof(voltStr), "%.2fV", bmsData.batteryVoltage);
   tft.drawString(voltStr, x + 12, y + 14, 2);
