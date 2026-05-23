@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JK-BMS 战斗模式显示屏效果预览</title>
+    <title>JK-BMS SPORT MODE - ESP32 Preview</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@400;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto+Mono:wght@400;700&display=swap');
 
         * {
             margin: 0;
@@ -14,8 +14,8 @@
         }
 
         body {
-            font-family: 'Noto Sans SC', 'Orbitron', sans-serif;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a0a0a 50%, #0a0a1a 100%);
+            font-family: 'Roboto Mono', 'Orbitron', monospace;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a0505 50%, #0a0505 100%);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -28,14 +28,14 @@
         h1 {
             text-align: center;
             margin-bottom: 30px;
-            font-size: 2rem;
+            font-size: 1.8rem;
             font-family: 'Orbitron', sans-serif;
             background: linear-gradient(90deg, #ff0040, #ff8000, #ff0040);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             text-shadow: 0 0 30px rgba(255, 0, 64, 0.5);
-            letter-spacing: 3px;
+            letter-spacing: 2px;
         }
 
         .container {
@@ -46,7 +46,7 @@
             align-items: flex-start;
         }
 
-        /* 模拟屏幕 - 碳纤维边框 */
+        /* 模拟屏幕 */
         .screen-wrapper {
             background: linear-gradient(145deg, #1a1a1a, #0d0d0d);
             padding: 20px;
@@ -59,420 +59,363 @@
             position: relative;
         }
 
-        .screen-wrapper::before {
-            content: 'SPORT MODE';
-            position: absolute;
-            top: 5px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-family: 'Orbitron', sans-serif;
-            font-size: 8px;
-            color: #ff0040;
-            letter-spacing: 4px;
-            text-shadow: 0 0 10px rgba(255, 0, 64, 0.8);
-        }
-
         .screen {
             width: 320px;
             height: 240px;
-            background: #050508;
+            background: #050505;
             border-radius: 10px;
             position: relative;
             overflow: hidden;
-            font-family: 'Orbitron', 'Noto Sans SC', monospace;
+            font-family: 'Roboto Mono', monospace;
             box-shadow: inset 0 0 40px rgba(255, 0, 64, 0.1);
         }
 
-        /* 扫描线效果 */
-        .screen::after {
+        /* ============== CORNER DECORATIONS ============== */
+        .corner {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            border: 2px solid #780020;
+            pointer-events: none;
+        }
+        .corner-tl { top: 5px; left: 5px; border-right: none; border-bottom: none; }
+        .corner-tr { top: 5px; right: 5px; border-left: none; border-bottom: none; }
+        .corner-bl { bottom: 5px; left: 5px; border-right: none; border-top: none; }
+        .corner-br { bottom: 5px; right: 5px; border-left: none; border-top: none; }
+
+        /* ============== HEADER ============== */
+        .header {
+            position: absolute;
+            top: 6px;
+            left: 20px;
+            right: 20px;
+            height: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            color: #ff0040;
+            letter-spacing: 1px;
+        }
+        .sport-label {
+            position: absolute;
+            top: 6px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 9px;
+            color: #ff0040;
+            letter-spacing: 2px;
+        }
+        .bt-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .bt-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+        .bt-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 9px;
+            font-weight: 700;
+        }
+        .bt-connected .bt-dot { background: #00ff88; }
+        .bt-connected .bt-text { color: #00ff88; }
+        .bt-disconnected .bt-dot { background: #ff0040; }
+        .bt-disconnected .bt-text { color: #ff0040; }
+
+        .header-divider {
+            position: absolute;
+            top: 24px;
+            left: 10px;
+            right: 10px;
+            height: 1px;
+            background: #ff0040;
+        }
+
+        /* ============== POWER CARD ============== */
+        .power-card {
+            position: absolute;
+            top: 30px;
+            left: 12px;
+            right: 12px;
+            height: 90px;
+            background: #140005;
+            border-radius: 10px;
+            border: 1px solid #780020;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(120, 0, 32, 0.2);
+        }
+        .power-card::before {
             content: '';
+            position: absolute;
+            top: 1px;
+            left: 1px;
+            right: 1px;
+            bottom: 1px;
+            border: 1px solid #3c0a14;
+            border-radius: 9px;
+            pointer-events: none;
+        }
+        .scan-line {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            bottom: 0;
-            background: repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(255, 0, 64, 0.03) 2px,
-                rgba(255, 0, 64, 0.03) 4px
-            );
-            pointer-events: none;
-            z-index: 100;
-        }
-
-        /* 标题栏 */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 12px;
-            height: 28px;
-            border-bottom: 1px solid rgba(255, 0, 64, 0.3);
-        }
-
-        .title {
-            font-size: 11px;
-            color: #ff0040;
-            font-weight: 700;
-            font-family: 'Orbitron', sans-serif;
-            letter-spacing: 2px;
-            text-shadow: 0 0 10px rgba(255, 0, 64, 0.5);
-        }
-
-        .bt-status {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .bt-icon {
-            width: 12px;
-            height: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-        }
-
-        .bt-text {
-            font-size: 9px;
-            font-weight: 700;
-            font-family: 'Orbitron', sans-serif;
-        }
-
-        .bt-connected .bt-icon,
-        .bt-connected .bt-text {
-            color: #00ff88;
-            text-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
-        }
-
-        .bt-disconnected .bt-icon,
-        .bt-disconnected .bt-text {
-            color: #ff3333;
-            text-shadow: 0 0 8px rgba(255, 51, 51, 0.6);
-        }
-
-        /* 功率卡片 - 战斗风格 */
-        .power-card {
-            position: absolute;
-            top: 30px;
-            left: 10px;
-            right: 10px;
-            height: 95px;
-            background: linear-gradient(135deg, rgba(255, 0, 64, 0.15), rgba(255, 100, 0, 0.1));
-            border-radius: 12px;
-            border: 1px solid rgba(255, 0, 64, 0.4);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            box-shadow: 
-                0 0 20px rgba(255, 0, 64, 0.2),
-                inset 0 0 30px rgba(255, 0, 64, 0.05);
-        }
-
-        .power-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
             height: 2px;
             background: linear-gradient(90deg, transparent, #ff0040, transparent);
-            animation: scan 3s linear infinite;
+            animation: scan 1.5s linear infinite;
+            pointer-events: none;
         }
-
         @keyframes scan {
-            0% { left: -100%; }
-            100% { left: 100%; }
+            0% { top: 2px; }
+            100% { top: 86px; }
         }
-
         .power-label {
-            font-size: 9px;
-            color: rgba(255, 255, 255, 0.6);
+            position: absolute;
+            top: 8px;
+            left: 12px;
+            font-size: 8px;
+            color: #7bef;
             text-transform: uppercase;
-            letter-spacing: 3px;
-            margin-bottom: 4px;
-            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 2px;
         }
-
         .power-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Orbitron', sans-serif;
             font-size: 32px;
             font-weight: 900;
-            font-family: 'Orbitron', sans-serif;
-            text-shadow: 0 0 20px currentColor;
             transition: color 0.3s ease;
         }
-
         .power-unit {
             font-size: 14px;
             font-weight: 400;
             margin-left: 4px;
         }
-
         .power-status {
-            font-size: 10px;
-            margin-top: 4px;
-            font-weight: 700;
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 9px;
             font-family: 'Orbitron', sans-serif;
             letter-spacing: 2px;
         }
 
-        /* 电压电流条 - 战斗风格 */
+        /* ============== POWER BAR ============== */
+        .power-bar-container {
+            position: absolute;
+            top: 124px;
+            left: 12px;
+            right: 12px;
+        }
+        .power-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: #210408;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .power-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s ease, background 0.3s ease;
+            position: relative;
+        }
+        .power-bar-tip {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 0;
+            width: 3px;
+            background: white;
+        }
+        .power-bar-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 7px;
+            color: #7bef;
+            font-family: 'Orbitron', sans-serif;
+            margin-top: 2px;
+        }
+
+        /* ============== VOLTAGE/CURRENT BAR ============== */
         .vi-bar {
             position: absolute;
-            top: 132px;
-            left: 10px;
-            right: 10px;
-            height: 36px;
-            background: linear-gradient(90deg, rgba(0, 0, 0, 0.6), rgba(20, 0, 0, 0.6));
-            border-radius: 8px;
-            border: 1px solid rgba(255, 100, 0, 0.3);
-            display: flex;
+            top: 148px;
+            left: 12px;
+            right: 12px;
+            height: 32px;
+            background: #0f0505;
+            border-radius: 6px;
+            border: 1px solid #501e0a;
             overflow: hidden;
-            box-shadow: 0 0 15px rgba(255, 100, 0, 0.1);
         }
-
-        .vi-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            position: relative;
-            padding: 0 12px;
+        .vi-left, .vi-right {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 50%;
+            padding: 6px 10px;
         }
-
-        .vi-section:first-child {
-            align-items: flex-start;
-        }
-
-        .vi-section:last-child {
-            align-items: flex-end;
-        }
-
+        .vi-right { right: 0; }
         .vi-label {
             font-size: 7px;
-            color: rgba(255, 255, 255, 0.5);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-family: 'Orbitron', sans-serif;
+            color: #7bef;
+            margin-bottom: 2px;
         }
-
         .vi-value {
             font-size: 16px;
             font-weight: 700;
             font-family: 'Orbitron', sans-serif;
         }
-
-        .voltage-value { 
-            color: #ffaa00; 
-            text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
-        }
-
-        .current-value { 
-            text-shadow: 0 0 10px currentColor;
-            transition: color 0.3s ease;
-        }
-
+        .voltage-value { color: #ffcc00; }
         .divider {
             position: absolute;
             left: 50%;
-            top: 4px;
-            bottom: 4px;
+            top: 6px;
+            bottom: 6px;
             width: 1px;
-            background: linear-gradient(180deg, transparent, rgba(255, 100, 0, 0.5), transparent);
+            background: #501e0a;
         }
-
         .direction-arrow {
             position: absolute;
-            left: 50%;
             top: 50%;
+            left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 14px;
-            font-family: 'Orbitron', sans-serif;
+        }
+        .arrow-up {
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 8px solid;
+        }
+        .arrow-down {
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 8px solid;
+        }
+        .arrow-idle {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #7bef;
         }
 
-        /* 底部卡片容器 */
+        /* ============== BOTTOM CARDS ============== */
         .bottom-cards {
             position: absolute;
-            top: 175px;
-            left: 10px;
-            right: 10px;
-            height: 58px;
+            top: 186px;
+            left: 12px;
+            right: 12px;
+            height: 48px;
             display: flex;
             gap: 8px;
         }
 
-        /* 容量卡片 */
+        /* Capacity Card */
         .capacity-card {
-            flex: 1;
-            background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(0, 200, 100, 0.05));
-            border-radius: 10px;
-            border: 1px solid rgba(0, 255, 136, 0.3);
-            padding: 5px 10px;
+            flex: 148px;
+            background: #001405;
+            border-radius: 8px;
+            border: 1px solid #00641e;
+            padding: 6px 8px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            box-shadow: 0 0 15px rgba(0, 255, 136, 0.1);
         }
-
         .card-label {
             font-size: 7px;
-            color: rgba(255, 255, 255, 0.5);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-family: 'Orbitron', sans-serif;
+            color: #7bef;
         }
-
         .capacity-main {
             display: flex;
             justify-content: space-between;
-            align-items: flex-end;
+            align-items: center;
         }
-
         .soc-value {
             font-size: 20px;
             font-weight: 900;
             color: #00ff88;
             font-family: 'Orbitron', sans-serif;
-            text-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
         }
-
         .cap-detail {
             font-size: 8px;
-            color: rgba(255, 255, 255, 0.5);
+            color: #7bef;
             text-align: right;
-            font-family: 'Orbitron', sans-serif;
         }
-
-        /* 温度卡片 */
-        .temp-card {
-            flex: 1;
-            background: linear-gradient(135deg, rgba(255, 100, 0, 0.1), rgba(255, 50, 0, 0.05));
-            border-radius: 10px;
-            border: 1px solid rgba(255, 100, 0, 0.3);
-            padding: 5px 10px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            box-shadow: 0 0 15px rgba(255, 100, 0, 0.1);
-        }
-
-        .temp-main {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-        }
-
-        .temp-value {
-            font-size: 20px;
-            font-weight: 900;
-            color: #ff8000;
-            font-family: 'Orbitron', sans-serif;
-            text-shadow: 0 0 15px rgba(255, 128, 0, 0.6);
-        }
-
-        .mos-temp {
-            font-size: 8px;
-            color: rgba(255, 255, 255, 0.5);
-            text-align: right;
-            font-family: 'Orbitron', sans-serif;
-        }
-
-        /* 进度条 - 战斗风格 */
         .progress-bar {
+            width: 100%;
             height: 6px;
-            background: rgba(0, 0, 0, 0.5);
+            background: #210408;
             border-radius: 3px;
             overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-
         .progress-fill {
             height: 100%;
             border-radius: 2px;
             transition: width 0.5s ease;
             position: relative;
         }
-
-        .progress-fill::after {
-            content: '';
+        .progress-tip {
             position: absolute;
-            right: 0;
             top: 0;
             bottom: 0;
-            width: 10px;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5));
-        }
-
-        .progress-fill.green {
-            background: linear-gradient(90deg, #00aa44, #00ff88);
-            box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-        }
-
-        .progress-fill.orange {
-            background: linear-gradient(90deg, #cc4400, #ff8000);
-            box-shadow: 0 0 10px rgba(255, 128, 0, 0.5);
-        }
-
-        /* 功率条 */
-        .power-bar-container {
-            position: absolute;
-            top: 108px;
-            left: 10px;
-            right: 10px;
-            height: 20px;
-        }
-
-        .power-bar-bg {
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 4px;
-            overflow: hidden;
-            border: 1px solid rgba(255, 0, 64, 0.2);
-            position: relative;
-        }
-
-        .power-bar-fill {
-            height: 100%;
-            border-radius: 3px;
-            transition: width 0.3s ease, background 0.3s ease;
-            position: relative;
-        }
-
-        .power-bar-fill::after {
-            content: '';
-            position: absolute;
             right: 0;
-            top: 0;
-            bottom: 0;
-            width: 20px;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8));
+            width: 2px;
+            background: white;
         }
 
-        .power-bar-labels {
+        /* Temp Card */
+        .temp-card {
+            flex: 140px;
+            background: #140800;
+            border-radius: 8px;
+            border: 1px solid #963c00;
+            padding: 6px 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .temp-main {
             display: flex;
             justify-content: space-between;
-            font-size: 7px;
-            color: rgba(255, 255, 255, 0.4);
+            align-items: center;
+        }
+        .temp-value {
+            font-size: 20px;
+            font-weight: 900;
+            color: #ff8000;
             font-family: 'Orbitron', sans-serif;
-            margin-top: 2px;
+        }
+        .mos-temp {
+            font-size: 8px;
+            color: #7bef;
+            text-align: right;
         }
 
-        /* 控制面板 - 战斗风格 */
+        /* ============== CONTROLS ============== */
         .controls {
-            background: linear-gradient(145deg, rgba(20, 0, 0, 0.8), rgba(10, 0, 10, 0.8));
+            background: linear-gradient(145deg, rgba(20, 0, 0, 0.8), rgba(10, 0, 5, 0.8));
             padding: 25px;
             border-radius: 15px;
             border: 1px solid rgba(255, 0, 64, 0.3);
             min-width: 320px;
             box-shadow: 0 0 30px rgba(255, 0, 64, 0.2);
         }
-
         .controls h2 {
             font-size: 1.1rem;
             margin-bottom: 15px;
@@ -481,19 +424,16 @@
             text-shadow: 0 0 15px rgba(255, 0, 64, 0.5);
             letter-spacing: 2px;
         }
-
         .control-group {
             margin-bottom: 15px;
         }
-
         .control-group label {
             display: block;
             margin-bottom: 5px;
             font-size: 0.85rem;
             color: rgba(255, 255, 255, 0.7);
-            font-family: 'Noto Sans SC', sans-serif;
+            font-family: 'Roboto Mono', sans-serif;
         }
-
         .control-group input[type="range"] {
             width: 100%;
             margin-bottom: 5px;
@@ -503,7 +443,6 @@
             background: linear-gradient(90deg, #330000, #ff0040);
             outline: none;
         }
-
         .control-group input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
             width: 16px;
@@ -513,7 +452,6 @@
             cursor: pointer;
             box-shadow: 0 0 10px rgba(255, 0, 64, 0.8);
         }
-
         .control-value {
             text-align: right;
             font-size: 0.9rem;
@@ -521,13 +459,11 @@
             font-weight: 700;
             font-family: 'Orbitron', sans-serif;
         }
-
         .status-toggle {
             display: flex;
             gap: 10px;
             margin-top: 10px;
         }
-
         .status-toggle button {
             flex: 1;
             padding: 8px 12px;
@@ -538,48 +474,40 @@
             cursor: pointer;
             font-weight: 700;
             transition: all 0.3s ease;
-            font-family: 'Noto Sans SC', sans-serif;
+            font-family: 'Roboto Mono', sans-serif;
         }
-
         .status-toggle button#btn-charge {
             border-color: #00ff88;
             color: #00ff88;
         }
-
         .status-toggle button#btn-charge:hover,
         .status-toggle button#btn-charge.active {
             background: #00ff88;
             color: #000;
             box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
         }
-
         .status-toggle button#btn-discharge {
             border-color: #ff0040;
             color: #ff0040;
         }
-
         .status-toggle button#btn-discharge:hover,
         .status-toggle button#btn-discharge.active {
             background: #ff0040;
             color: #fff;
             box-shadow: 0 0 15px rgba(255, 0, 64, 0.5);
         }
-
         .status-toggle button#btn-idle {
             border-color: #888;
             color: #888;
         }
-
         .status-toggle button#btn-idle:hover,
         .status-toggle button#btn-idle.active {
             background: #888;
             color: #000;
         }
-
         .bt-toggle {
             margin-top: 15px;
         }
-
         .bt-toggle button {
             width: 100%;
             padding: 10px;
@@ -589,105 +517,88 @@
             cursor: pointer;
             font-weight: 700;
             transition: all 0.3s ease;
-            font-family: 'Noto Sans SC', sans-serif;
+            font-family: 'Roboto Mono', sans-serif;
         }
-
         .bt-toggle button#btn-connect {
             border-color: #00ff88;
             color: #00ff88;
         }
-
         .bt-toggle button#btn-connect:hover,
         .bt-toggle button#btn-connect.connected {
             background: #00ff88;
             color: #000;
             box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
         }
-
-        /* 说明文字 */
         .info {
             margin-top: 30px;
             text-align: center;
             color: rgba(255, 255, 255, 0.6);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             max-width: 600px;
-            font-family: 'Noto Sans SC', sans-serif;
-        }
-
-        /* 角标装饰 */
-        .corner-decoration {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255, 0, 64, 0.5);
-        }
-
-        .corner-tl { top: 5px; left: 5px; border-right: none; border-bottom: none; }
-        .corner-tr { top: 5px; right: 5px; border-left: none; border-bottom: none; }
-        .corner-bl { bottom: 5px; left: 5px; border-right: none; border-top: none; }
-        .corner-br { bottom: 5px; right: 5px; border-left: none; border-top: none; }
-
-        /* 响应式 */
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-                align-items: center;
-            }
+            font-family: 'Roboto Mono', sans-serif;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
-    <h1>JK-BMS 战斗模式显示屏</h1>
+    <h1>JK-BMS SPORT MODE - ESP32 Preview</h1>
 
     <div class="container">
         <!-- 模拟屏幕 -->
         <div class="screen-wrapper">
             <div class="screen" id="screen">
                 <!-- 角标装饰 -->
-                <div class="corner-decoration corner-tl"></div>
-                <div class="corner-decoration corner-tr"></div>
-                <div class="corner-decoration corner-bl"></div>
-                <div class="corner-decoration corner-br"></div>
+                <div class="corner corner-tl"></div>
+                <div class="corner corner-tr"></div>
+                <div class="corner corner-bl"></div>
+                <div class="corner corner-br"></div>
 
-                <!-- 标题栏 -->
+                <!-- 标题 -->
                 <div class="header">
                     <div class="title">JK-BMS MONITOR</div>
                     <div class="bt-status bt-connected" id="bt-status">
-                        <div class="bt-icon">◉</div>
+                        <div class="bt-dot"></div>
                         <div class="bt-text" id="bt-text">ONLINE</div>
                     </div>
                 </div>
+                <div class="sport-label">SPORT MODE</div>
+                <div class="header-divider"></div>
 
                 <!-- 功率卡片 -->
                 <div class="power-card">
-                    <div class="power-label">实时功率</div>
+                    <div class="scan-line"></div>
+                    <div class="power-label">SHI SHI GONGLV</div>
                     <div class="power-value" id="power-value">
-                        <span id="power-num">1250</span><span class="power-unit">W</span>
+                        <span id="power-num">1.25</span><span class="power-unit">kW</span>
                     </div>
-                    <div class="power-status" id="power-status">放电中</div>
+                    <div class="power-status" id="power-status">FANG DIAN ZHONG</div>
                 </div>
 
                 <!-- 功率条 -->
                 <div class="power-bar-container">
                     <div class="power-bar-bg">
-                        <div class="power-bar-fill" id="power-bar-fill" style="width: 41.6%;"></div>
+                        <div class="power-bar-fill" id="power-bar-fill" style="width: 41.6%;">
+                            <div class="power-bar-tip"></div>
+                        </div>
                     </div>
                     <div class="power-bar-labels">
                         <span>0W</span>
-                        <span id="power-bar-max">3000W</span>
+                        <span>3000W</span>
                     </div>
                 </div>
 
                 <!-- 电压电流条 -->
                 <div class="vi-bar">
-                    <div class="vi-section">
-                        <div class="vi-label">总电压</div>
+                    <div class="vi-left">
+                        <div class="vi-label">ZONG DIAN YA</div>
                         <div class="vi-value voltage-value" id="voltage-value">52.50V</div>
                     </div>
                     <div class="divider"></div>
-                    <div class="direction-arrow" id="direction-arrow">▼</div>
-                    <div class="vi-section">
-                        <div class="vi-label">电流</div>
+                    <div class="direction-arrow" id="direction-arrow">
+                        <div class="arrow-down" id="arrow-element"></div>
+                    </div>
+                    <div class="vi-right" style="text-align: right;">
+                        <div class="vi-label">DIAN LIU</div>
                         <div class="vi-value current-value" id="current-value">-23.80A</div>
                     </div>
                 </div>
@@ -695,23 +606,27 @@
                 <!-- 底部卡片 -->
                 <div class="bottom-cards">
                     <div class="capacity-card">
-                        <div class="card-label">剩余容量</div>
+                        <div class="card-label">SHENG YU RONG LIANG</div>
                         <div class="capacity-main">
                             <div class="soc-value" id="soc-value">85%</div>
                             <div class="cap-detail" id="cap-detail">85.0/100Ah</div>
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill green" id="soc-bar" style="width: 85%"></div>
+                            <div class="progress-fill" style="background: #00ff88; width: 85%;" id="soc-bar">
+                                <div class="progress-tip"></div>
+                            </div>
                         </div>
                     </div>
                     <div class="temp-card">
-                        <div class="card-label">电池温度</div>
+                        <div class="card-label">DIAN CHI WEN DU</div>
                         <div class="temp-main">
-                            <div class="temp-value" id="temp-value">28.5°C</div>
-                            <div class="mos-temp" id="mos-temp">MOS:32°C</div>
+                            <div class="temp-value" id="temp-value">28.5C</div>
+                            <div class="mos-temp" id="mos-temp">MOS:32C</div>
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill orange" id="temp-bar" style="width: 60%"></div>
+                            <div class="progress-fill" style="background: #ff8000; width: 55%;" id="temp-bar">
+                                <div class="progress-tip"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -720,57 +635,60 @@
 
         <!-- 控制面板 -->
         <div class="controls">
-            <h2>⚡ 控制台</h2>
+            <h2>⚡ CONTROL PANEL</h2>
 
             <div class="control-group">
-                <label>功率 (W)</label>
+                <label>Power (W)</label>
                 <input type="range" id="power-slider" min="0" max="3000" value="1250" step="50">
                 <div class="control-value"><span id="power-slider-val">1250</span> W</div>
             </div>
 
             <div class="control-group">
-                <label>电压 (V)</label>
+                <label>Voltage (V)</label>
                 <input type="range" id="voltage-slider" min="40" max="58.8" value="52.5" step="0.1">
                 <div class="control-value"><span id="voltage-slider-val">52.50</span> V</div>
             </div>
 
             <div class="control-group">
-                <label>电流 (A) - 负值放电/正值充电</label>
+                <label>Current (A) - Negative = Discharge</label>
                 <input type="range" id="current-slider" min="-50" max="50" value="-23.8" step="0.1">
                 <div class="control-value"><span id="current-slider-val">-23.80</span> A</div>
             </div>
 
             <div class="control-group">
-                <label>电量 SOC (%)</label>
+                <label>SOC (%)</label>
                 <input type="range" id="soc-slider" min="0" max="100" value="85" step="1">
                 <div class="control-value"><span id="soc-slider-val">85</span> %</div>
             </div>
 
             <div class="control-group">
-                <label>温度 (°C)</label>
+                <label>Temp (C)</label>
                 <input type="range" id="temp-slider" min="10" max="60" value="28.5" step="0.5">
-                <div class="control-value"><span id="temp-slider-val">28.5</span> °C</div>
+                <div class="control-value"><span id="temp-slider-val">28.5</span> C</div>
             </div>
 
             <div class="control-group">
-                <label>状态切换</label>
+                <label>Status Toggle</label>
                 <div class="status-toggle">
-                    <button id="btn-charge">充电中</button>
-                    <button id="btn-discharge" class="active">放电中</button>
-                    <button id="btn-idle">待机</button>
+                    <button id="btn-charge">CHONG DIAN</button>
+                    <button id="btn-discharge" class="active">FANG DIAN</button>
+                    <button id="btn-idle">DAI JI</button>
                 </div>
             </div>
 
             <div class="control-group bt-toggle">
-                <label>蓝牙连接</label>
-                <button id="btn-connect" class="connected">已连接</button>
+                <label>Bluetooth</label>
+                <button id="btn-connect" class="connected">CONNECTED</button>
             </div>
         </div>
     </div>
 
     <div class="info">
-        <p>🔥 战斗模式显示屏效果预览</p>
-        <p>功率越大颜色越战斗！负电流(放电)为绿色，正电流(充电)随功率变红！</p>
+        <p>🔥 This preview <strong>exactly matches</strong> the ESP32 code design</p>
+        <p>• All labels use Pinyin (no Chinese font support on ST7789)</p>
+        <p>• Power color changes: Green → Yellow → Orange → Red</p>
+        <p>• Discharge (negative current) = Green | Charge = Power color</p>
+        <p>• SPORT MODE with corner decorations and scan line animation</p>
     </div>
 
     <script>
@@ -783,10 +701,12 @@
             temp: 28.5,
             mosTemp: 32,
             status: 'discharging',
-            connected: true
+            connected: true,
+            capacityNominal: 100,
+            capacityRemain: 85
         };
 
-        // DOM元素
+        // DOM 元素
         const powerNum = document.getElementById('power-num');
         const powerValue = document.getElementById('power-value');
         const powerStatus = document.getElementById('power-status');
@@ -798,8 +718,8 @@
         const capDetail = document.getElementById('cap-detail');
         const tempValue = document.getElementById('temp-value');
         const tempBar = document.getElementById('temp-bar');
-        const mosTemp = document.getElementById('mos-temp');
-        const directionArrow = document.getElementById('direction-arrow');
+        const mosTempEl = document.getElementById('mos-temp');
+        const arrowElement = document.getElementById('arrow-element');
         const btStatus = document.getElementById('bt-status');
         const btText = document.getElementById('bt-text');
         const btnConnect = document.getElementById('btn-connect');
@@ -823,70 +743,56 @@
         const btnDischarge = document.getElementById('btn-discharge');
         const btnIdle = document.getElementById('btn-idle');
 
-        // 获取功率颜色 - 战斗风格渐变
-        function getPowerColor(power) {
-            const maxPower = 3000;
-            const ratio = Math.min(power / maxPower, 1);
-            
+        // 颜色计算函数
+        function getPowerColorRGB(power) {
+            const ratio = Math.min(power / 3000.0, 1.0);
             if (ratio < 0.3) {
-                // 青色 -> 绿色
-                return '#00ff88';
+                return 'rgb(0, 255, 136)';
             } else if (ratio < 0.6) {
-                // 绿色 -> 黄色
                 const r = Math.round(0 + (255 - 0) * ((ratio - 0.3) / 0.3));
                 return `rgb(${r}, 255, 0)`;
             } else if (ratio < 0.8) {
-                // 黄色 -> 橙色
                 const g = Math.round(255 - (255 - 128) * ((ratio - 0.6) / 0.2));
                 return `rgb(255, ${g}, 0)`;
             } else {
-                // 橙色 -> 红色 -> 深红
-                const r = 255;
                 const g = Math.round(128 * (1 - (ratio - 0.8) / 0.2));
-                const b = 0;
-                return `rgb(${r}, ${g}, ${b})`;
+                return `rgb(255, ${g}, 0)`;
             }
         }
 
-        // 获取功率条颜色
         function getPowerBarColor(power) {
-            const ratio = Math.min(power / 3000, 1);
-            if (ratio < 0.3) return 'linear-gradient(90deg, #00aa44, #00ff88)';
-            if (ratio < 0.6) return 'linear-gradient(90deg, #aaaa00, #ffff00)';
-            if (ratio < 0.8) return 'linear-gradient(90deg, #cc6600, #ff8800)';
-            return 'linear-gradient(90deg, #cc0000, #ff0040)';
+            const ratio = Math.min(power / 3000.0, 1.0);
+            if (ratio < 0.3) return 'rgb(0, 255, 136)';
+            if (ratio < 0.6) return 'rgb(255, 238, 0)';
+            if (ratio < 0.8) return 'rgb(255, 128, 0)';
+            return 'rgb(255, 0, 64)';
         }
 
-        // 获取电流颜色
         function getCurrentColor(current, power) {
-            if (current < 0) {
-                // 放电 - 绿色
-                return '#00ff88';
-            } else if (current > 0) {
-                // 充电 - 随功率变化
-                return getPowerColor(power);
-            } else {
-                return '#888888';
+            if (current < -0.1) {
+                return 'rgb(0, 255, 136)';
+            } else if (current > 0.1) {
+                return getPowerColorRGB(power);
             }
+            return '#888888';
         }
 
         // 更新显示
         function updateDisplay() {
             // 功率
+            const pColor = getPowerColorRGB(state.power);
+            powerValue.style.color = pColor;
+            
             if (state.power >= 1000) {
-                powerNum.textContent = (state.power / 1000).toFixed(2);
+                powerNum.textContent = (state.power / 1000.0).toFixed(2);
                 powerValue.querySelector('.power-unit').textContent = 'kW';
             } else {
                 powerNum.textContent = Math.round(state.power);
                 powerValue.querySelector('.power-unit').textContent = 'W';
             }
-            
-            // 功率颜色
-            const pColor = getPowerColor(state.power);
-            powerValue.style.color = pColor;
-            
+
             // 功率条
-            const powerRatio = Math.min(state.power / 3000, 1);
+            const powerRatio = Math.min(state.power / 3000.0, 1.0);
             powerBarFill.style.width = (powerRatio * 100) + '%';
             powerBarFill.style.background = getPowerBarColor(state.power);
 
@@ -894,57 +800,55 @@
             voltageValue.textContent = state.voltage.toFixed(2) + 'V';
             currentValue.textContent = (state.current > 0 ? '+' : '') + state.current.toFixed(2) + 'A';
             
-            // 电流颜色
             const cColor = getCurrentColor(state.current, state.power);
             currentValue.style.color = cColor;
-            currentValue.style.textShadow = `0 0 10px ${cColor}80`;
 
             // SOC
             socValue.textContent = state.soc + '%';
             socBar.style.width = state.soc + '%';
-            const remainAh = (state.soc / 100) * 100;
-            capDetail.textContent = remainAh.toFixed(1) + '/100Ah';
+            state.capacityRemain = (state.soc / 100) * state.capacityNominal;
+            capDetail.textContent = state.capacityRemain.toFixed(1) + '/' + state.capacityNominal.toFixed(0) + 'Ah';
 
             // 温度
-            tempValue.textContent = state.temp.toFixed(1) + '°C';
-            const tempPercent = ((state.temp - 10) / 50) * 100;
-            tempBar.style.width = Math.max(10, Math.min(100, tempPercent)) + '%';
-            mosTemp.textContent = 'MOS:' + state.mosTemp + '°C';
+            tempValue.textContent = state.temp.toFixed(1) + 'C';
+            const tempPercent = ((state.temp + 10) / 70.0) * 100;
+            tempBar.style.width = Math.max(0, Math.min(100, tempPercent)) + '%';
+            mosTempEl.textContent = 'MOS:' + state.mosTemp.toFixed(0) + 'C';
 
             // 方向箭头
+            const dirArrowContainer = document.getElementById('direction-arrow');
+            let arrowHTML = '';
             if (state.status === 'charging') {
-                directionArrow.textContent = '▲';
-                directionArrow.style.color = getPowerColor(state.power);
+                arrowHTML = `<div class="arrow-up" style="border-bottom-color: ${getPowerColorRGB(state.power)};"></div>`;
             } else if (state.status === 'discharging') {
-                directionArrow.textContent = '▼';
-                directionArrow.style.color = '#00ff88';
+                arrowHTML = `<div class="arrow-down" style="border-top-color: rgb(0, 255, 136);"></div>`;
             } else {
-                directionArrow.textContent = '●';
-                directionArrow.style.color = '#888';
+                arrowHTML = '<div class="arrow-idle"></div>';
             }
+            dirArrowContainer.innerHTML = arrowHTML;
 
-            // 功率状态 - 中文
+            // 状态文字
             if (state.status === 'charging') {
-                powerStatus.textContent = '充电中';
-                powerStatus.style.color = getPowerColor(state.power);
+                powerStatus.textContent = 'CHONG DIAN ZHONG';
+                powerStatus.style.color = getPowerColorRGB(state.power);
             } else if (state.status === 'discharging') {
-                powerStatus.textContent = '放电中';
-                powerStatus.style.color = '#00ff88';
+                powerStatus.textContent = 'FANG DIAN ZHONG';
+                powerStatus.style.color = 'rgb(0, 255, 136)';
             } else {
-                powerStatus.textContent = '待机';
-                powerStatus.style.color = '#888';
+                powerStatus.textContent = 'DAI JI';
+                powerStatus.style.color = '#7bef';
             }
 
             // 蓝牙状态
             if (state.connected) {
                 btStatus.className = 'bt-status bt-connected';
                 btText.textContent = 'ONLINE';
-                btnConnect.textContent = '已连接';
+                btnConnect.textContent = 'CONNECTED';
                 btnConnect.className = 'connected';
             } else {
                 btStatus.className = 'bt-status bt-disconnected';
                 btText.textContent = 'OFFLINE';
-                btnConnect.textContent = '已断开';
+                btnConnect.textContent = 'DISCONNECTED';
                 btnConnect.className = '';
             }
         }
@@ -958,12 +862,18 @@
 
             if (newStatus === 'charging' && state.current < 0) {
                 state.current = Math.abs(state.current);
+                state.power = Math.abs(state.voltage * state.current);
                 currentSlider.value = state.current;
+                powerSlider.value = state.power;
                 currentSliderVal.textContent = '+' + state.current.toFixed(2);
+                powerSliderVal.textContent = Math.round(state.power);
             } else if (newStatus === 'discharging' && state.current > 0) {
                 state.current = -Math.abs(state.current);
+                state.power = Math.abs(state.voltage * state.current);
                 currentSlider.value = state.current;
+                powerSlider.value = state.power;
                 currentSliderVal.textContent = state.current.toFixed(2);
+                powerSliderVal.textContent = Math.round(state.power);
             } else if (newStatus === 'idle') {
                 state.current = 0;
                 state.power = 0;
@@ -986,6 +896,9 @@
         voltageSlider.addEventListener('input', (e) => {
             state.voltage = parseFloat(e.target.value);
             voltageSliderVal.textContent = state.voltage.toFixed(2);
+            state.power = Math.abs(state.voltage * state.current);
+            powerSlider.value = state.power;
+            powerSliderVal.textContent = Math.round(state.power);
             updateDisplay();
         });
 
@@ -1025,7 +938,7 @@
 
         tempSlider.addEventListener('input', (e) => {
             state.temp = parseFloat(e.target.value);
-            state.mosTemp = Math.round(state.temp + 3 + Math.random() * 3);
+            state.mosTemp = state.temp + 3 + Math.random() * 3;
             tempSliderVal.textContent = state.temp.toFixed(1);
             updateDisplay();
         });
