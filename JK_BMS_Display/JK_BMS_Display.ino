@@ -4,6 +4,7 @@
  * BMS MAC: 98:da:20:07:b9:00
  * BMS Name: JK_BD4A24S10P
  * Display: 320x240 landscape (ST7789)
+ * Style: Combat/Sport Mode - 战斗风格运动模式
  ***************************************************/
 
 #include <Arduino.h>
@@ -36,34 +37,41 @@
 #define CMD_DEVICE_INFO     0x97
 #define CMD_CELL_INFO       0x96
 
-// Colors (16-bit RGB565)
-#define COLOR_BG            0x0A0A2E  // Deep navy background
-#define COLOR_CARD_BG       0x151540  // Slightly lighter card bg
-#define COLOR_CARD_BORDER   0x2A2A6A  // Card border
-#define COLOR_POWER         0x00E5FF  // Cyan for power
-#define COLOR_POWER_BG      0x003344  // Dark cyan bg
-#define COLOR_CAPACITY      0x00E676  // Green for capacity
-#define COLOR_CAPACITY_BG   0x003311  // Dark green bg
-#define COLOR_TEMP          0xFFAB40  // Orange for temp
-#define COLOR_TEMP_BG       0x331100  // Dark orange bg
-#define COLOR_VOLTAGE       0xE040FB  // Purple for voltage
-#define COLOR_CURRENT       0xFF5252  // Red for current
-#define COLOR_TEXT_PRIMARY  0xFFFFFF  // White
-#define COLOR_TEXT_SECOND   0xB0B0D0  // Light gray-blue
-#define COLOR_BLUETOOTH_ON  0x00E676  // Green BT connected
-#define COLOR_BLUETOOTH_OFF 0xFF5252  // Red BT disconnected
-#define COLOR_PROGRESS_BG   0x1A1A4E  // Progress bar background
+// ============== COMBAT STYLE COLORS (16-bit RGB565) ==============
+// Background - deep black with blue tint
+#define COLOR_BG            0x0000  // Pure black base
+#define COLOR_BG_DARK       0x0808  // Very dark gray
+#define COLOR_BG_PANEL      0x1082  // Dark blue-gray
+
+// Neon accent colors
+#define COLOR_NEON_BLUE     0x07FF  // Cyan neon
+#define COLOR_NEON_GREEN    0x07E0  // Green neon
+#define COLOR_NEON_YELLOW   0xFFE0  // Yellow neon
+#define COLOR_NEON_ORANGE   0xFC00  // Orange neon
+#define COLOR_NEON_RED      0xF800  // Red neon
+#define COLOR_NEON_PURPLE   0xF81F  // Purple neon
+#define COLOR_NEON_WHITE    0xFFFF  // White
+
+// Combat theme colors
+#define COLOR_COMBAT_DARK   0x2104  // Dark panel
+#define COLOR_COMBAT_MID    0x4208  // Mid panel
+#define COLOR_COMBAT_LIGHT  0x632C  // Light panel
+#define COLOR_BORDER        0x3186  // Border color
+#define COLOR_BORDER_GLOW   0x4A69  // Glowing border
+
+// Text colors
+#define COLOR_TEXT_WHITE    0xFFFF
+#define COLOR_TEXT_GRAY     0x8410
+#define COLOR_TEXT_DIM      0x4208
 
 // ============== GLOBAL OBJECTS ==============
 TFT_eSPI tft = TFT_eSPI();
 
 // ============== BMS DATA STRUCTURE ==============
 struct BMSData {
-  // Connection state
   bool connected = false;
   uint32_t lastUpdate = 0;
 
-  // Cell info (Frame 0x02)
   float cellVoltage[32] = {0};
   float cellResistance[32] = {0};
   float avgCellVoltage = 0;
@@ -73,32 +81,30 @@ struct BMSData {
 
   float powerTubeTemp = 0;
   float batteryVoltage = 0;
-  float batteryPower = 0;      // Instant power (W)
-  float chargeCurrent = 0;     // Positive=charging, Negative=discharging
+  float batteryPower = 0;
+  float chargeCurrent = 0;
   float tempSensor1 = 0;
   float tempSensor2 = 0;
   uint16_t errorsBitmask = 0;
   float balanceCurrent = 0;
-  uint8_t balancingAction = 0; // 0=Off, 1=Charging balancer, 2=Discharging balancer
-  uint8_t soc = 0;             // State of charge %
-  float capacityRemain = 0;    // Remaining capacity (Ah)
-  float nominalCapacity = 0;   // Total capacity (Ah)
+  uint8_t balancingAction = 0;
+  uint8_t soc = 0;
+  float capacityRemain = 0;
+  float nominalCapacity = 0;
   uint32_t cycleCount = 0;
   float cycleCapacity = 0;
-  uint8_t soh = 0;             // State of health %
+  uint8_t soh = 0;
   uint32_t totalRuntime = 0;
   bool chargeMosfet = false;
   bool dischargeMosfet = false;
   bool balancing = false;
 
-  // Device info (Frame 0x03)
   char vendorID[17] = {0};
   char hardwareVersion[9] = {0};
   char softwareVersion[9] = {0};
   char deviceName[17] = {0};
   uint32_t deviceUptime = 0;
 
-  // Settings (Frame 0x01)
   float cellCount = 0;
   float totalBatteryCapacity = 0;
 } bmsData;
@@ -120,18 +126,31 @@ uint8_t sequenceCounter = 0;
 // ============== UI STATE ==============
 bool screenInitialized = false;
 unsigned long lastScreenUpdate = 0;
-#define SCREEN_UPDATE_INTERVAL  500  // Update screen every 500ms
+#define SCREEN_UPDATE_INTERVAL  500
+
+// Previous values for partial redraw
+float prevPower = -999;
+float prevCurrent = -999;
+float prevVoltage = -999;
+uint8_t prevSOC = 255;
+float prevTemp = -999;
+bool prevConnected = false;
 
 // ============== FUNCTION DECLARATIONS ==============
 void setupDisplay();
 void drawUI();
-void drawRoundedRect(int x, int y, int w, int h, int r, uint32_t fillColor, uint32_t borderColor);
-void drawProgressBar(int x, int y, int w, int h, int r, float percent, uint32_t barColor, uint32_t bgColor);
-void drawBluetoothIcon(int x, int y, bool connected);
+void drawCombatBackground();
+void drawHeader();
 void drawPowerCard();
+void drawVoltageCurrentBar();
 void drawCapacityCard();
 void drawTempCard();
-void drawVoltageCurrentBar();
+void drawBluetoothIcon(int x, int y, bool connected);
+void drawRoundedRect(int x, int y, int w, int h, int r, uint32_t fillColor, uint32_t borderColor);
+void drawProgressBar(int x, int y, int w, int h, int r, float percent, uint32_t barColor, uint32_t bgColor);
+uint16_t getPowerColor(float power);
+uint16_t getTempColor(float temp);
+void drawGlowText(int x, int y, const char* text, uint32_t color, uint32_t glowColor, int font);
 void parseJK02_32S_Frame(uint8_t* data, uint16_t len);
 uint8_t calculateCRC(const uint8_t* data, uint16_t len);
 void sendCommand(uint8_t cmd);
@@ -170,13 +189,11 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 
 static void notifyCallback(BLERemoteCharacteristic* pChar, uint8_t* pData, size_t length, bool isNotify) {
   for (size_t i = 0; i < length; i++) {
-    // Check for frame start sequence: 0x55 0xAA 0xEB 0x90
     if (!frameStarted && i < length - 3 &&
         pData[i] == 0x55 && pData[i+1] == 0xAA &&
         pData[i+2] == 0xEB && pData[i+3] == 0x90) {
       frameStarted = true;
       rxIndex = 0;
-      // Copy from start sequence
       for (size_t j = i; j < length && rxIndex < 320; j++) {
         rxBuffer[rxIndex++] = pData[j];
       }
@@ -186,9 +203,7 @@ static void notifyCallback(BLERemoteCharacteristic* pChar, uint8_t* pData, size_
     }
   }
 
-  // Check if frame is complete (>= 300 bytes)
   if (frameStarted && rxIndex >= 300) {
-    // Verify CRC
     uint8_t crc = calculateCRC(rxBuffer, 299);
     if (crc == rxBuffer[299]) {
       parseJK02_32S_Frame(rxBuffer, rxIndex);
@@ -206,39 +221,34 @@ static void notifyCallback(BLERemoteCharacteristic* pChar, uint8_t* pData, size_
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("JK-BMS Monitor Starting...");
+  Serial.println("JK-BMS Combat Monitor Starting...");
 
-  // Init display
   setupDisplay();
 
-  // Init BLE
   BLEDevice::init("ESP32_JK_BMS_Monitor");
   BLEScan* pScan = BLEDevice::getScan();
   pScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pScan->setInterval(1349);
   pScan->setWindow(449);
   pScan->setActiveScan(true);
-  pScan->start(30, false);  // Scan for 30 seconds
+  pScan->start(30, false);
 
   Serial.println("Scanning for BMS...");
 }
 
 // ============== MAIN LOOP ==============
 void loop() {
-  // Handle BLE connection
   if (doConnect) {
     connectToBMS();
     doConnect = false;
   }
 
-  // Reconnect if disconnected
   if (!connected && !doConnect && millis() - bmsData.lastUpdate > 10000) {
     Serial.println("Attempting reconnect...");
     BLEDevice::getScan()->start(10, false);
     bmsData.lastUpdate = millis();
   }
 
-  // Update display
   if (millis() - lastScreenUpdate > SCREEN_UPDATE_INTERVAL) {
     drawUI();
     lastScreenUpdate = millis();
@@ -250,31 +260,66 @@ void loop() {
 // ============== DISPLAY SETUP ==============
 void setupDisplay() {
   pinMode(TFT_BL, OUTPUT);
-  digitalWrite(TFT_BL, HIGH);  // Turn on backlight
+  digitalWrite(TFT_BL, HIGH);
 
   tft.init();
-  tft.setRotation(1);  // Landscape mode
+  tft.setRotation(1);
   tft.fillScreen(COLOR_BG);
-
-  // Set text rendering mode
   tft.setTextDatum(MC_DATUM);
-
   screenInitialized = true;
 }
 
-// ============== DRAW ROUNDED RECTANGLE ==============
+// ============== COMBAT STYLE COLOR FUNCTIONS ==============
+uint16_t getPowerColor(float power) {
+  // Negative power (charging) = green
+  if (power < 0) {
+    return COLOR_NEON_GREEN;
+  }
+  // Positive power (discharging) = gradient from yellow to red based on power
+  float maxPower = 5000.0; // 5kW max for full red
+  float ratio = power / maxPower;
+  if (ratio > 1.0) ratio = 1.0;
+  if (ratio < 0.0) ratio = 0.0;
+
+  if (ratio < 0.33) {
+    // Yellow to Orange
+    float localRatio = ratio / 0.33;
+    uint8_t r = 0xFF;
+    uint8_t g = 0xE0 + (0x00 - 0xE0) * localRatio;
+    uint8_t b = 0x00;
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+  } else if (ratio < 0.66) {
+    // Orange to Red-Orange
+    float localRatio = (ratio - 0.33) / 0.33;
+    uint8_t r = 0xFF;
+    uint8_t g = 0x80 * (1.0 - localRatio);
+    uint8_t b = 0x00;
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+  } else {
+    // Red-Orange to Red
+    float localRatio = (ratio - 0.66) / 0.34;
+    uint8_t r = 0xFF;
+    uint8_t g = 0x40 * (1.0 - localRatio);
+    uint8_t b = 0x00;
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+  }
+}
+
+uint16_t getTempColor(float temp) {
+  if (temp < 20) return COLOR_NEON_GREEN;
+  if (temp < 35) return COLOR_NEON_YELLOW;
+  if (temp < 45) return COLOR_NEON_ORANGE;
+  return COLOR_NEON_RED;
+}
+
+// ============== DRAW HELPERS ==============
 void drawRoundedRect(int x, int y, int w, int h, int r, uint32_t fillColor, uint32_t borderColor) {
-  // Fill
   tft.fillRoundRect(x, y, w, h, r, fillColor);
-  // Border
   tft.drawRoundRect(x, y, w, h, r, borderColor);
 }
 
-// ============== DRAW PROGRESS BAR ==============
 void drawProgressBar(int x, int y, int w, int h, int r, float percent, uint32_t barColor, uint32_t bgColor) {
-  // Background
   tft.fillRoundRect(x, y, w, h, r, bgColor);
-  // Progress fill
   int fillW = (int)((w - 4) * (percent / 100.0));
   if (fillW > 0) {
     if (fillW > w - 4) fillW = w - 4;
@@ -282,216 +327,256 @@ void drawProgressBar(int x, int y, int w, int h, int r, float percent, uint32_t 
   }
 }
 
-// ============== DRAW BLUETOOTH ICON ==============
-void drawBluetoothIcon(int x, int y, bool isConnected) {
-  uint32_t color = isConnected ? COLOR_BLUETOOTH_ON : COLOR_BLUETOOTH_OFF;
+void drawGlowText(int x, int y, const char* text, uint32_t color, uint32_t glowColor, int font) {
+  // Draw glow effect (multiple offset texts)
+  tft.setTextColor(glowColor, COLOR_BG);
+  for (int dx = -1; dx <= 1; dx++) {
+    for (int dy = -1; dy <= 1; dy++) {
+      if (dx != 0 || dy != 0) {
+        tft.drawString(text, x + dx, y + dy, font);
+      }
+    }
+  }
+  // Draw main text
+  tft.setTextColor(color, COLOR_BG);
+  tft.drawString(text, x, y, font);
+}
 
-  // Simple BT symbol using lines
-  // Vertical line
+void drawBluetoothIcon(int x, int y, bool isConnected) {
+  uint32_t color = isConnected ? COLOR_NEON_GREEN : COLOR_NEON_RED;
+  // BT symbol
   tft.drawLine(x + 4, y, x + 4, y + 14, color);
-  // Diagonal lines
   tft.drawLine(x + 4, y, x + 9, y + 4, color);
   tft.drawLine(x + 9, y + 4, x, y + 10, color);
   tft.drawLine(x, y + 4, x + 9, y + 10, color);
   tft.drawLine(x + 9, y + 10, x + 4, y + 14, color);
-
-  // Status dot
   if (isConnected) {
-    tft.fillCircle(x + 12, y + 7, 2, COLOR_BLUETOOTH_ON);
+    tft.fillCircle(x + 12, y + 7, 2, COLOR_NEON_GREEN);
   }
+}
+
+// ============== DRAW COMBAT BACKGROUND ==============
+void drawCombatBackground() {
+  static bool bgDrawn = false;
+  if (bgDrawn) return;
+
+  tft.fillScreen(COLOR_BG);
+
+  // Draw combat grid lines
+  uint32_t gridColor = COLOR_COMBAT_MID;
+  for (int i = 0; i < SCREEN_WIDTH; i += 40) {
+    tft.drawLine(i, 30, i, SCREEN_HEIGHT, gridColor);
+  }
+  for (int i = 30; i < SCREEN_HEIGHT; i += 30) {
+    tft.drawLine(0, i, SCREEN_WIDTH, i, gridColor);
+  }
+
+  // Top accent bar
+  tft.fillRect(0, 0, SCREEN_WIDTH, 3, COLOR_NEON_BLUE);
+
+  bgDrawn = true;
+}
+
+// ============== DRAW HEADER ==============
+void drawHeader() {
+  // Title with combat style
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(COLOR_NEON_BLUE, COLOR_BG);
+  tft.setTextSize(1);
+  tft.drawString("JK-BMS COMBAT", 12, 8, 2);
+
+  // Bluetooth status
+  drawBluetoothIcon(SCREEN_WIDTH - 50, 8, bmsData.connected);
+
+  tft.setTextDatum(TR_DATUM);
+  tft.setTextColor(bmsData.connected ? COLOR_NEON_GREEN : COLOR_NEON_RED, COLOR_BG);
+  tft.drawString(bmsData.connected ? "ONLINE" : "OFFLINE", SCREEN_WIDTH - 12, 10, 1);
+}
+
+// ============== DRAW POWER CARD (COMBAT STYLE) ==============
+void drawPowerCard() {
+  int x = 10, y = 32, w = SCREEN_WIDTH - 20, h = 95, r = 8;
+
+  // Combat panel background
+  drawRoundedRect(x, y, w, h, r, COLOR_COMBAT_DARK, COLOR_BORDER);
+
+  // Inner glow border
+  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, r - 1, COLOR_BORDER_GLOW);
+
+  // Label
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  tft.drawString("实时功率", x + 12, y + 8, 1);
+
+  // Power value with dynamic color
+  float power = bmsData.batteryPower;
+  uint16_t powerColor = getPowerColor(power);
+
+  tft.setTextDatum(MC_DATUM);
+
+  // Glow effect for power text
+  char powerStr[16];
+  if (fabs(power) >= 1000) {
+    snprintf(powerStr, sizeof(powerStr), "%.2f", fabs(power) / 1000.0);
+  } else {
+    snprintf(powerStr, sizeof(powerStr), "%.0f", fabs(power));
+  }
+
+  // Draw glow
+  tft.setTextColor(COLOR_COMBAT_MID, COLOR_COMBAT_DARK);
+  for (int dx = -2; dx <= 2; dx++) {
+    for (int dy = -2; dy <= 2; dy++) {
+      if (dx != 0 || dy != 0) {
+        tft.drawString(powerStr, x + w / 2 + dx, y + h / 2 + 2 + dy, 6);
+      }
+    }
+  }
+
+  // Draw main power text
+  tft.setTextColor(powerColor, COLOR_COMBAT_DARK);
+  tft.drawString(powerStr, x + w / 2, y + h / 2 + 2, 6);
+
+  // Unit
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  if (fabs(power) >= 1000) {
+    tft.drawString("kW", x + w / 2 + 80, y + h / 2 + 2, 2);
+  } else {
+    tft.drawString("W", x + w / 2 + 70, y + h / 2 + 2, 2);
+  }
+
+  // Power bar at bottom of card
+  float powerPercent = fabs(power) / 5000.0 * 100;
+  if (powerPercent > 100) powerPercent = 100;
+  drawProgressBar(x + 12, y + h - 14, w - 24, 6, 3, powerPercent, powerColor, COLOR_COMBAT_MID);
+}
+
+// ============== DRAW VOLTAGE/CURRENT BAR ==============
+void drawVoltageCurrentBar() {
+  int x = 10, y = 132, w = SCREEN_WIDTH - 20, h = 38, r = 6;
+
+  drawRoundedRect(x, y, w, h, r, COLOR_COMBAT_DARK, COLOR_BORDER);
+
+  // Voltage (left)
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(COLOR_NEON_PURPLE, COLOR_COMBAT_DARK);
+  char voltStr[16];
+  snprintf(voltStr, sizeof(voltStr), "%.2fV", bmsData.batteryVoltage);
+  tft.drawString(voltStr, x + 12, y + 14, 2);
+
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  tft.drawString("总电压", x + 12, y + 4, 1);
+
+  // Current (right) - with combat color
+  float current = bmsData.chargeCurrent;
+  uint16_t currentColor = getPowerColor(current * -100); // Invert for current display
+
+  tft.setTextDatum(TR_DATUM);
+  tft.setTextColor(currentColor, COLOR_COMBAT_DARK);
+  char currStr[16];
+  snprintf(currStr, sizeof(currStr), "%.2fA", current);
+  tft.drawString(currStr, x + w - 12, y + 14, 2);
+
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  tft.drawString("电流", x + w - 12, y + 4, 1);
+
+  // Center divider with arrow
+  int cx = x + w / 2;
+  int cy = y + h / 2;
+  tft.drawLine(cx, y + 6, cx, y + h - 6, COLOR_BORDER);
+
+  if (current > 0.1) {
+    tft.fillTriangle(cx - 3, cy + 3, cx + 3, cy + 3, cx, cy - 4, COLOR_NEON_GREEN);
+  } else if (current < -0.1) {
+    tft.fillTriangle(cx - 3, cy - 3, cx + 3, cy - 3, cx, cy + 4, COLOR_NEON_RED);
+  } else {
+    tft.fillCircle(cx, cy, 2, COLOR_TEXT_GRAY);
+  }
+}
+
+// ============== DRAW CAPACITY CARD ==============
+void drawCapacityCard() {
+  int x = 10, y = 175, w = 150, h = 58, r = 6;
+
+  drawRoundedRect(x, y, w, h, r, COLOR_COMBAT_DARK, COLOR_BORDER);
+
+  // Label
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  tft.drawString("电池容量", x + 10, y + 5, 1);
+
+  // SOC large
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(COLOR_NEON_GREEN, COLOR_COMBAT_DARK);
+  char socStr[8];
+  snprintf(socStr, sizeof(socStr), "%d%%", bmsData.soc);
+  tft.drawString(socStr, x + 10, y + 18, 2);
+
+  // Used/Total
+  tft.setTextDatum(TR_DATUM);
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  char capStr[24];
+  snprintf(capStr, sizeof(capStr), "%.1f/%.0fAh",
+           bmsData.capacityRemain, bmsData.nominalCapacity);
+  tft.drawString(capStr, x + w - 10, y + 24, 1);
+
+  // SOC bar
+  drawProgressBar(x + 10, y + 42, w - 20, 8, 3, bmsData.soc, COLOR_NEON_GREEN, COLOR_COMBAT_MID);
+}
+
+// ============== DRAW TEMPERATURE CARD ==============
+void drawTempCard() {
+  int x = 170, y = 175, w = 140, h = 58, r = 6;
+
+  drawRoundedRect(x, y, w, h, r, COLOR_COMBAT_DARK, COLOR_BORDER);
+
+  // Label
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  tft.drawString("电池温度", x + 10, y + 5, 1);
+
+  // Temperature with color based on value
+  float avgTemp = (bmsData.tempSensor1 + bmsData.tempSensor2) / 2.0;
+  uint16_t tempColor = getTempColor(avgTemp);
+
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(tempColor, COLOR_COMBAT_DARK);
+  char tempStr[24];
+  if (bmsData.tempSensor1 == 0 && bmsData.tempSensor2 == 0) {
+    snprintf(tempStr, sizeof(tempStr), "-- C");
+  } else {
+    snprintf(tempStr, sizeof(tempStr), "%.1fC", avgTemp);
+  }
+  tft.drawString(tempStr, x + 10, y + 18, 2);
+
+  // MOS temp
+  tft.setTextDatum(TR_DATUM);
+  tft.setTextColor(COLOR_TEXT_GRAY, COLOR_COMBAT_DARK);
+  char mosStr[16];
+  snprintf(mosStr, sizeof(mosStr), "MOS:%.0fC", bmsData.powerTubeTemp);
+  tft.drawString(mosStr, x + w - 10, y + 24, 1);
+
+  // Temp bar
+  float tempPercent = (avgTemp + 20) / 80.0 * 100;
+  if (tempPercent < 0) tempPercent = 0;
+  if (tempPercent > 100) tempPercent = 100;
+  drawProgressBar(x + 10, y + 42, w - 20, 8, 3, tempPercent, tempColor, COLOR_COMBAT_MID);
 }
 
 // ============== DRAW MAIN UI ==============
 void drawUI() {
   if (!screenInitialized) return;
 
-  // Clear only if needed (first draw or major change)
   static bool firstDraw = true;
   if (firstDraw) {
-    tft.fillScreen(COLOR_BG);
+    drawCombatBackground();
     firstDraw = false;
   }
 
-  // === HEADER ===
-  // Title
-  tft.setTextColor(COLOR_TEXT_PRIMARY, COLOR_BG);
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextSize(1);
-  tft.drawString("JK-BMS Monitor", 12, 8, 2);
-
-  // Bluetooth icon in top-right
-  drawBluetoothIcon(SCREEN_WIDTH - 24, 8, bmsData.connected);
-
-  // Connection status text
-  tft.setTextDatum(TR_DATUM);
-  tft.setTextColor(bmsData.connected ? COLOR_BLUETOOTH_ON : COLOR_BLUETOOTH_OFF, COLOR_BG);
-  tft.drawString(bmsData.connected ? "ONLINE" : "OFFLINE", SCREEN_WIDTH - 30, 10, 1);
-
-  // === MAIN POWER CARD (Large, centered-top) ===
+  drawHeader();
   drawPowerCard();
-
-  // === CAPACITY CARD (Bottom-left) ===
   drawCapacityCard();
-
-  // === TEMPERATURE CARD (Bottom-right) ===
   drawTempCard();
-
-  // === VOLTAGE/CURRENT BAR (Between power and bottom cards) ===
   drawVoltageCurrentBar();
-}
-
-// ============== DRAW POWER CARD ==============
-void drawPowerCard() {
-  int x = 12, y = 32, w = SCREEN_WIDTH - 24, h = 90, r = 12;
-
-  // Card background with gradient effect (simulate with fill)
-  drawRoundedRect(x, y, w, h, r, COLOR_POWER_BG, COLOR_CARD_BORDER);
-
-  // Inner highlight
-  tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, r - 1, 0x004455);
-
-  // Label
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_TEXT_SECOND, COLOR_POWER_BG);
-  tft.drawString("REAL-TIME POWER", x + 15, y + 10, 1);
-
-  // Power value (large, centered in card)
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(COLOR_POWER, COLOR_POWER_BG);
-
-  float power = bmsData.batteryPower;
-  char powerStr[16];
-  if (power >= 1000) {
-    snprintf(powerStr, sizeof(powerStr), "%.2f kW", power / 1000.0);
-  } else {
-    snprintf(powerStr, sizeof(powerStr), "%.0f W", power);
-  }
-  tft.drawString(powerStr, x + w / 2, y + h / 2 + 5, 4);
-
-  // Charging/Discharging indicator
-  tft.setTextDatum(TC_DATUM);
-  if (bmsData.chargeCurrent > 0.1) {
-    tft.setTextColor(COLOR_CAPACITY, COLOR_POWER_BG);
-    tft.drawString("CHARGING", x + w / 2, y + h - 18, 1);
-  } else if (bmsData.chargeCurrent < -0.1) {
-    tft.setTextColor(COLOR_TEMP, COLOR_POWER_BG);
-    tft.drawString("DISCHARGING", x + w / 2, y + h - 18, 1);
-  } else {
-    tft.setTextColor(COLOR_TEXT_SECOND, COLOR_POWER_BG);
-    tft.drawString("IDLE", x + w / 2, y + h - 18, 1);
-  }
-}
-
-// ============== DRAW CAPACITY CARD ==============
-void drawCapacityCard() {
-  int x = 12, y = 172, w = 148, h = 60, r = 10;
-
-  drawRoundedRect(x, y, w, h, r, COLOR_CAPACITY_BG, COLOR_CARD_BORDER);
-
-  // Label
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_TEXT_SECOND, COLOR_CAPACITY_BG);
-  tft.drawString("CAPACITY", x + 10, y + 6, 1);
-
-  // SOC percentage (large)
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_CAPACITY, COLOR_CAPACITY_BG);
-  char socStr[8];
-  snprintf(socStr, sizeof(socStr), "%d%%", bmsData.soc);
-  tft.drawString(socStr, x + 10, y + 22, 2);
-
-  // Used/Total
-  tft.setTextDatum(TR_DATUM);
-  tft.setTextColor(COLOR_TEXT_SECOND, COLOR_CAPACITY_BG);
-  char capStr[24];
-  snprintf(capStr, sizeof(capStr), "%.1f/%.0fAh",
-           bmsData.capacityRemain, bmsData.nominalCapacity);
-  tft.drawString(capStr, x + w - 10, y + 28, 1);
-
-  // Progress bar
-  drawProgressBar(x + 10, y + 44, w - 20, 8, 4, bmsData.soc, COLOR_CAPACITY, COLOR_PROGRESS_BG);
-}
-
-// ============== DRAW TEMPERATURE CARD ==============
-void drawTempCard() {
-  int x = 172, y = 172, w = 136, h = 60, r = 10;
-
-  drawRoundedRect(x, y, w, h, r, COLOR_TEMP_BG, COLOR_CARD_BORDER);
-
-  // Label
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_TEXT_SECOND, COLOR_TEMP_BG);
-  tft.drawString("TEMPERATURE", x + 10, y + 6, 1);
-
-  // Temperature values
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_TEMP, COLOR_TEMP_BG);
-  char tempStr[24];
-
-  // Show the higher of T1/T2, or average
-  float avgTemp = (bmsData.tempSensor1 + bmsData.tempSensor2) / 2.0;
-  if (bmsData.tempSensor1 == 0 && bmsData.tempSensor2 == 0) {
-    snprintf(tempStr, sizeof(tempStr), "-- C");
-  } else {
-    snprintf(tempStr, sizeof(tempStr), "%.1f C", avgTemp);
-  }
-  tft.drawString(tempStr, x + 10, y + 22, 2);
-
-  // MOS temp
-  tft.setTextDatum(TR_DATUM);
-  tft.setTextColor(COLOR_TEXT_SECOND, COLOR_TEMP_BG);
-  char mosStr[16];
-  snprintf(mosStr, sizeof(mosStr), "MOS:%.0fC", bmsData.powerTubeTemp);
-  tft.drawString(mosStr, x + w - 10, y + 28, 1);
-
-  // Temp bar (visual indicator)
-  float tempPercent = (avgTemp + 20) / 80.0 * 100;  // Map -20 to 60C
-  if (tempPercent < 0) tempPercent = 0;
-  if (tempPercent > 100) tempPercent = 100;
-  drawProgressBar(x + 10, y + 44, w - 20, 8, 4, tempPercent, COLOR_TEMP, COLOR_PROGRESS_BG);
-}
-
-// ============== DRAW VOLTAGE/CURRENT BAR ==============
-void drawVoltageCurrentBar() {
-  int x = 12, y = 130, w = SCREEN_WIDTH - 24, h = 34, r = 8;
-
-  drawRoundedRect(x, y, w, h, r, COLOR_CARD_BG, COLOR_CARD_BORDER);
-
-  // Voltage (left side)
-  tft.setTextDatum(TL_DATUM);
-  tft.setTextColor(COLOR_VOLTAGE, COLOR_CARD_BG);
-  char voltStr[16];
-  snprintf(voltStr, sizeof(voltStr), "%.2fV", bmsData.batteryVoltage);
-  tft.drawString(voltStr, x + 12, y + 10, 2);
-
-  tft.setTextColor(COLOR_TEXT_SECOND, COLOR_CARD_BG);
-  tft.drawString("VOLTAGE", x + 12, y + 2, 1);
-
-  // Current (right side)
-  tft.setTextDatum(TR_DATUM);
-  tft.setTextColor(COLOR_CURRENT, COLOR_CARD_BG);
-  char currStr[16];
-  snprintf(currStr, sizeof(currStr), "%.2fA", bmsData.chargeCurrent);
-  tft.drawString(currStr, x + w - 12, y + 10, 2);
-
-  tft.setTextColor(COLOR_TEXT_SECOND, COLOR_CARD_BG);
-  tft.drawString("CURRENT", x + w - 12, y + 2, 1);
-
-  // Center divider
-  tft.drawLine(x + w / 2, y + 6, x + w / 2, y + h - 6, COLOR_CARD_BORDER);
-
-  // Small current direction indicator
-  int cx = x + w / 2;
-  int cy = y + h / 2;
-  if (bmsData.chargeCurrent > 0.1) {
-    // Charging arrow up
-    tft.fillTriangle(cx - 4, cy + 3, cx + 4, cy + 3, cx, cy - 5, COLOR_CAPACITY);
-  } else if (bmsData.chargeCurrent < -0.1) {
-    // Discharging arrow down
-    tft.fillTriangle(cx - 4, cy - 3, cx + 4, cy - 3, cx, cy + 5, COLOR_TEMP);
-  } else {
-    tft.fillCircle(cx, cy, 3, COLOR_TEXT_SECOND);
-  }
 }
 
 // ============== PARSE JK02_32S FRAME ==============
@@ -501,84 +586,46 @@ void parseJK02_32S_Frame(uint8_t* data, uint16_t len) {
   uint8_t frameType = data[4];
 
   switch (frameType) {
-    case 0x02: {  // Cell info frame
-      // Cell voltages (bytes 6-69, 32 x uint16 LE, 0.001V)
+    case 0x02: {
       for (int i = 0; i < 32; i++) {
         int offset = 6 + i * 2;
         bmsData.cellVoltage[i] = (data[offset] | (data[offset + 1] << 8)) * 0.001;
       }
 
-      // Average cell voltage (bytes 74-75)
       bmsData.avgCellVoltage = (data[74] | (data[75] << 8)) * 0.001;
-
-      // Delta cell voltage (bytes 76-77)
       bmsData.deltaCellVoltage = (data[76] | (data[77] << 8)) * 0.001;
-
-      // Max/Min cell numbers (bytes 78-79)
       bmsData.maxCellNum = data[78];
       bmsData.minCellNum = data[79];
 
-      // Cell resistances (bytes 80-143)
       for (int i = 0; i < 32; i++) {
         int offset = 80 + i * 2;
         bmsData.cellResistance[i] = (data[offset] | (data[offset + 1] << 8)) * 0.001;
       }
 
-      // Power tube temperature (bytes 144-145, int16 LE, 0.1C)
       bmsData.powerTubeTemp = (int16_t)(data[144] | (data[145] << 8)) * 0.1;
-
-      // Battery voltage (bytes 150-153, uint32 LE, 0.001V)
       bmsData.batteryVoltage = ((uint32_t)data[150] | ((uint32_t)data[151] << 8) |
                                 ((uint32_t)data[152] << 16) | ((uint32_t)data[153] << 24)) * 0.001;
-
-      // Battery power (bytes 154-157, uint32 LE, 0.001W)
       bmsData.batteryPower = ((uint32_t)data[154] | ((uint32_t)data[155] << 8) |
                               ((uint32_t)data[156] << 16) | ((uint32_t)data[157] << 24)) * 0.001;
-
-      // Charge current (bytes 158-161, int32 LE, 0.001A)
       bmsData.chargeCurrent = (int32_t)((uint32_t)data[158] | ((uint32_t)data[159] << 8) |
                                         ((uint32_t)data[160] << 16) | ((uint32_t)data[161] << 24)) * 0.001;
-
-      // Temperature sensors (bytes 162-165, int16 LE, 0.1C)
       bmsData.tempSensor1 = (int16_t)(data[162] | (data[163] << 8)) * 0.1;
       bmsData.tempSensor2 = (int16_t)(data[164] | (data[165] << 8)) * 0.1;
-
-      // Errors bitmask (bytes 166-167)
       bmsData.errorsBitmask = data[166] | (data[167] << 8);
-
-      // Balance current (bytes 170-171, int16 LE, 0.001A)
       bmsData.balanceCurrent = (int16_t)(data[170] | (data[171] << 8)) * 0.001;
-
-      // Balancing action (byte 172)
       bmsData.balancingAction = data[172];
-
-      // State of charge (byte 173)
       bmsData.soc = data[173];
-
-      // Remaining capacity (bytes 174-177, uint32 LE, 0.001Ah)
       bmsData.capacityRemain = ((uint32_t)data[174] | ((uint32_t)data[175] << 8) |
                                 ((uint32_t)data[176] << 16) | ((uint32_t)data[177] << 24)) * 0.001;
-
-      // Nominal capacity (bytes 178-181, uint32 LE, 0.001Ah)
       bmsData.nominalCapacity = ((uint32_t)data[178] | ((uint32_t)data[179] << 8) |
                                  ((uint32_t)data[180] << 16) | ((uint32_t)data[181] << 24)) * 0.001;
-
-      // Cycle count (bytes 182-185, uint32 LE)
       bmsData.cycleCount = ((uint32_t)data[182] | ((uint32_t)data[183] << 8) |
                             ((uint32_t)data[184] << 16) | ((uint32_t)data[185] << 24));
-
-      // Total cycle capacity (bytes 186-189, uint32 LE, 0.001Ah)
       bmsData.cycleCapacity = ((uint32_t)data[186] | ((uint32_t)data[187] << 8) |
                                ((uint32_t)data[188] << 16) | ((uint32_t)data[189] << 24)) * 0.001;
-
-      // SOH (byte 190)
       bmsData.soh = data[190];
-
-      // Total runtime (bytes 194-197, uint32 LE, seconds)
       bmsData.totalRuntime = ((uint32_t)data[194] | ((uint32_t)data[195] << 8) |
                               ((uint32_t)data[196] << 16) | ((uint32_t)data[197] << 24));
-
-      // MOSFET states (bytes 198-201)
       bmsData.chargeMosfet = data[198] != 0;
       bmsData.dischargeMosfet = data[199] != 0;
       bmsData.balancing = data[201] != 0;
@@ -589,24 +636,15 @@ void parseJK02_32S_Frame(uint8_t* data, uint16_t len) {
       break;
     }
 
-    case 0x03: {  // Device info frame
-      // Vendor ID (bytes 6-21)
+    case 0x03: {
       memcpy(bmsData.vendorID, &data[6], 16);
       bmsData.vendorID[16] = '\0';
-
-      // Hardware version (bytes 22-29)
       memcpy(bmsData.hardwareVersion, &data[22], 8);
       bmsData.hardwareVersion[8] = '\0';
-
-      // Software version (bytes 30-37)
       memcpy(bmsData.softwareVersion, &data[30], 8);
       bmsData.softwareVersion[8] = '\0';
-
-      // Device uptime (bytes 38-41)
       bmsData.deviceUptime = ((uint32_t)data[38] | ((uint32_t)data[39] << 8) |
                               ((uint32_t)data[40] << 16) | ((uint32_t)data[41] << 24));
-
-      // Device name (bytes 46-61)
       memcpy(bmsData.deviceName, &data[46], 16);
       bmsData.deviceName[16] = '\0';
 
@@ -615,11 +653,8 @@ void parseJK02_32S_Frame(uint8_t* data, uint16_t len) {
       break;
     }
 
-    case 0x01: {  // Settings frame
-      // Cell count (byte 114)
+    case 0x01: {
       bmsData.cellCount = data[114];
-
-      // Total battery capacity (bytes 130-133, uint32 LE, 0.001Ah)
       bmsData.totalBatteryCapacity = ((uint32_t)data[130] | ((uint32_t)data[131] << 8) |
                                       ((uint32_t)data[132] << 16) | ((uint32_t)data[133] << 24)) * 0.001;
 
@@ -646,18 +681,17 @@ uint8_t calculateCRC(const uint8_t* data, uint16_t len) {
 // ============== SEND COMMAND ==============
 void sendCommand(uint8_t cmd) {
   uint8_t frame[20] = {
-    0xAA, 0x55, 0x90, 0xEB,  // Header
-    cmd,                       // Command
-    0x00,                      // Length
-    0x00, 0x00, 0x00, 0x00,   // Data padding
-    0x00, 0x00, 0x00, 0x00,   // Data padding
-    0x00, 0x00,               // Padding
-    sequenceCounter++,         // Sequence counter
-    0x00, 0x00,               // Reserved
-    0x00                       // CRC (will be calculated)
+    0xAA, 0x55, 0x90, 0xEB,
+    cmd,
+    0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00,
+    sequenceCounter++,
+    0x00, 0x00,
+    0x00
   };
 
-  // Calculate CRC (sum of bytes 0-18)
   frame[19] = calculateCRC(frame, 19);
 
   if (pRemoteChar != nullptr) {
@@ -681,7 +715,6 @@ void connectToBMS() {
 
   Serial.println("Connected to BLE server");
 
-  // Get service
   BLERemoteService* pRemoteService = pClient->getService(SERVICE_UUID);
   if (pRemoteService == nullptr) {
     Serial.println("Service not found!");
@@ -689,7 +722,6 @@ void connectToBMS() {
     return;
   }
 
-  // Get characteristic
   pRemoteChar = pRemoteService->getCharacteristic(CHAR_UUID);
   if (pRemoteChar == nullptr) {
     Serial.println("Characteristic not found!");
@@ -697,17 +729,15 @@ void connectToBMS() {
     return;
   }
 
-  // Subscribe to notifications
   if (pRemoteChar->canNotify()) {
     pRemoteChar->registerForNotify(notifyCallback);
     Serial.println("Notifications registered");
   }
 
-  // Send initial commands to start data stream
   delay(500);
-  sendCommand(CMD_DEVICE_INFO);  // 0x97
+  sendCommand(CMD_DEVICE_INFO);
   delay(500);
-  sendCommand(CMD_CELL_INFO);    // 0x96
+  sendCommand(CMD_CELL_INFO);
 
   connected = true;
   bmsData.connected = true;
