@@ -19,17 +19,17 @@
 #endif
 
 // ==================== 颜色定义 - 机甲战斗风格 ====================
-#define COLOR_BG_DARK     0x0A0A        // 深黑背景
-#define COLOR_PRIMARY     0xF800        // 纯红
-#define COLOR_SECONDARY   0xFA20        // 橙红
-#define COLOR_ACCENT      0xFF00        // 黄色警示
-#define COLOR_POWER_LOW   0x00F0        // 蓝色 - 低功率
-#define COLOR_POWER_MED   0x0FF0       // 青绿 - 中功率
-#define COLOR_POWER_HIGH  0xFF00       // 黄色 - 高功率
-#define COLOR_POWER_MAX   0xF800       // 红色 - 最大功率
-#define COLOR_CARD_BG     0x1A1A        // 卡片深色背景
-#define COLOR_TEXT        0xFFFF        // 白色文字
-#define COLOR_TEXT_DIM    0x8410        // 灰色文字
+#define COLOR_BG_DARK     0x0A0A
+#define COLOR_PRIMARY     0xF800
+#define COLOR_SECONDARY   0xFA20
+#define COLOR_ACCENT      0xFF00
+#define COLOR_POWER_LOW   0x00F0
+#define COLOR_POWER_MED   0x0FF0
+#define COLOR_POWER_HIGH  0xFF00
+#define COLOR_POWER_MAX   0xF800
+#define COLOR_CARD_BG     0x1A1A
+#define COLOR_TEXT        0xFFFF
+#define COLOR_TEXT_DIM    0x8410
 
 // ==================== 全局变量 ====================
 TFT_eSPI tft = TFT_eSPI();
@@ -95,6 +95,9 @@ class BMSCallbacks : public NimBLEClientCallbacks {
     }
 };
 
+// 提前声明jkBms供ScanCallbacks使用
+JKBMS jkBms(BMS_MAC);
+
 class ScanCallbacks : public NimBLEScanCallbacks {
     void onResult(const NimBLEAdvertisedDevice* advertisedDevice) {
         String devName = advertisedDevice->getName().c_str();
@@ -110,7 +113,6 @@ class ScanCallbacks : public NimBLEScanCallbacks {
     }
 };
 
-JKBMS jkBms(BMS_MAC);
 BMSCallbacks bmsCallbacks;
 ScanCallbacks scanCallbacks;
 
