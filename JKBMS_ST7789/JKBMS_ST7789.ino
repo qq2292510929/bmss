@@ -37,6 +37,7 @@ uint8_t frameBuffer[320];
 int framePos = 0;
 bool frameStarted = false;
 bool newDataAvailable = false;
+NimBLEClient* pClient = nullptr;
 
 struct BMSData {
     float cellVoltages[32];
@@ -66,7 +67,7 @@ int pulsePhase = 0;
 class JKBMS {
 public:
     NimBLERemoteCharacteristic* pChr = nullptr;
-    const NimBLEAdvertisedDevice* advDevice = nullptr;
+    NimBLEAdvertisedDevice* advDevice = nullptr;
     bool doConnect = false;
     bool connected = false;
     std::string targetMAC;
@@ -75,7 +76,7 @@ public:
     JKBMS() = default;
 
     bool connectToServer();
-    void handleNotification(uint8_t* pData, size_t length);
+    void handleNotification(NimBLERemoteCharacteristic* pChr, uint8_t* pData, size_t length, bool isNotify);
     void writeRegister(uint8_t address, uint32_t value);
     uint8_t calculateCRC(const uint8_t data[], uint16_t len);
 };
@@ -85,16 +86,16 @@ class BMSCallbacks : public NimBLEClientCallbacks {
         DEBUG_PRINTLN("BLE connected");
         bleConnected = true;
     }
-    void onDisconnect(NimBLEClient* pClient, int reason) {
-        DEBUG_PRINTF("BLE disconnected: %d\n", reason);
+    void onDisconnect(NimBLEClient* pClient) {
+        DEBUG_PRINTLN("BLE disconnected");
         bleConnected = false;
     }
 };
 
 JKBMS jkBms(BMS_MAC);
 
-class ScanCallbacks : public NimBLEScanCallbacks {
-    void onResult(const NimBLEAdvertisedDevice* advertisedDevice) {
+class ScanCallbacks : public NimBLEAdvertisedDeviceCallbacks {
+    void onResult(NimBLEAdvertisedDevice* advertisedDevice) {
         String devName = advertisedDevice->getName().c_str();
         String devAddr = advertisedDevice->getAddress().toString().c_str();
         DEBUG_PRINTF("Found: %s [%s]\n", devName.c_str(), devAddr.c_str());
@@ -110,7 +111,6 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 
 BMSCallbacks bmsCallbacks;
 ScanCallbacks scanCallbacks;
-NimBLEScan* pScan = nullptr;
 
 uint8_t JKBMS::calculateCRC(const uint8_t data[], uint16_t len) {
     uint8_t crc = 0;
@@ -123,26 +123,24 @@ uint8_t JKBMS::calculateCRC(const uint8_t data[], uint16_t len) {
 bool JKBMS::connectToServer() {
     DEBUG_PRINTLN("Connecting to BMS...");
 
-    NimBLEClient* pClient = NimBLEDevice::getClientByPeerAddress(advDevice->getAddress());
-    if (!pClient) {
-        pClient = NimBLEDevice::createClient();
-        pClient->setClientCallbacks(&bmsCallbacks, true);
-        pClient->setConnectionParams(12, 12, 0, 150);
-        pClient->setConnectTimeout(10);
-    }
+    pClient = NimBLEDevice::createClient();
+    pClient->setClientCallbacks(&bmsCallbacks);
+    pClient->setConnectTimeout(10);
 
     if (!pClient->connect(advDevice)) {
         DEBUG_PRINTLN("Connection failed");
+        pClient = nullptr;
         return false;
     }
 
-    DEBUG_PRINTF("Connected: %s RSSI: %d\n", pClient->getPeerAddress().toString().c_str(), pClient->getRssi());
+    DEBUG_PRINTLN("Connected!");
 
     NimBLERemoteService* pSvc = pClient->getService("ffe0");
     if (pSvc) {
         pChr = pSvc->getCharacteristic("ffe1");
         if (pChr && pChr->canNotify()) {
-            if (pChr->subscribe(true, notifyCallback)) {
+            if (pChr->subscribe(true, std::bind(&JKBMS::handleNotification, this,
+                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4))) {
                 DEBUG_PRINTLN("Subscribed");
                 delay(500);
                 writeRegister(0x97, 0);
@@ -169,11 +167,7 @@ void JKBMS::writeRegister(uint8_t address, uint32_t value) {
     }
 }
 
-void notifyCallback(NimBLERemoteCharacteristic* pChr, uint8_t* pData, size_t length, bool isNotify) {
-    jkBms.handleNotification(pData, length);
-}
-
-void JKBMS::handleNotification(uint8_t* pData, size_t length) {
+void JKBMS::handleNotification(NimBLERemoteCharacteristic* pChr, uint8_t* pData, size_t length, bool isNotify) {
     lastNotifyTime = millis();
 
     if (pData[0] == 0x55 && pData[1] == 0xAA && pData[2] == 0xEB && pData[3] == 0x90) {
@@ -685,18 +679,6 @@ void drawConnectingScreen() {
     tft.setCursor(80, 165);
     tft.print("MAC: " + String(BMS_MAC));
 
-    int loadingX = 160;
-    int loadingY = 200;
-    int loadingR = 25;
-    int angle = (millis() / 20) % 360;
-    for (int i = 0; i < 12; i++) {
-        int segAngle = (angle + i * 30) * PI / 180;
-        int dotX = loadingX + cos(segAngle) * loadingR;
-        int dotY = loadingY + sin(segAngle) * loadingR;
-        int brightness = map(i, 0, 12, 50, 255);
-        tft.fillCircle(dotX, dotY, 3, interpolateColor(COLOR_PRIMARY, TFT_BLACK, 1 - brightness / 255.0));
-    }
-
     tft.setTextColor(COLOR_TEXT_DIM, TFT_BLACK);
     tft.setTextSize(1);
     tft.setCursor(80, 230);
@@ -721,7 +703,6 @@ void setup() {
     #endif
 
     NimBLEDevice::init("");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
     drawConnectingScreen();
 }
@@ -729,12 +710,10 @@ void setup() {
 void loop() {
     if (!bleConnected) {
         if (!jkBms.doConnect) {
-            pScan = NimBLEDevice::getScan();
-            pScan->setScanCallbacks(&scanCallbacks);
+            NimBLEScan* pScan = NimBLEDevice::getScan();
+            pScan->setAdvertisedDeviceCallbacks(&scanCallbacks);
             pScan->setActiveScan(true);
-            pScan->setInterval(100);
-            pScan->setWindow(50);
-            pScan->start(5, false);
+            pScan->start(5);
         }
 
         if (jkBms.doConnect) {
@@ -754,7 +733,9 @@ void loop() {
 
         if (millis() - lastNotifyTime > 10000) {
             bleConnected = false;
-            NimBLEDevice::getClientByPeerAddress(jkBms.advDevice->getAddress())->disconnect();
+            if (pClient) {
+                pClient->disconnect();
+            }
         }
     }
 
