@@ -385,6 +385,7 @@ void drawMainPowerDisplay() {
     drawRoundedRect(centerX - 100, centerY - 50, 200, 100, 15, interpolateColor(powerColor, TFT_BLACK, 0.8));
     drawCardBorder(centerX - 100, centerY - 50, 200, 100, powerColor);
     
+    tft.setTextFont(1);
     tft.setTextColor(powerColor, interpolateColor(powerColor, TFT_BLACK, 0.8));
     tft.setTextSize(1);
     tft.setCursor(centerX - 40, centerY - 40);
@@ -393,18 +394,19 @@ void drawMainPowerDisplay() {
     float displayPower = abs(bmsData.batteryPower);
     String powerStr = String(displayPower, 1);
     
-    tft.setFreeFont(&Orbitron_Medium_32);
+    tft.setFreeFont(&FF24);
     tft.setTextColor(TFT_WHITE, interpolateColor(powerColor, TFT_BLACK, 0.8));
     tft.setTextSize(1);
     tft.setCursor(centerX - 60, centerY + 5);
     tft.println(powerStr);
     
-    tft.setFreeFont(&Orbitron_Medium_Bold_24);
+    tft.setFreeFont(&FF23);
     tft.setTextColor(TFT_WHITE, interpolateColor(powerColor, TFT_BLACK, 0.8));
     tft.setTextSize(1);
     tft.setCursor(centerX + 30, centerY + 15);
     tft.println("W");
     
+    tft.setTextFont(1);
     if (bmsData.batteryPower < -10) {
         tft.setTextColor(COLOR_ACCENT, interpolateColor(powerColor, TFT_BLACK, 0.8));
         tft.setTextSize(1);
@@ -428,6 +430,7 @@ void drawCapacityDisplay() {
     drawRoundedRect(x, y, w, h, 12, cardColor);
     drawCardBorder(x, y, w, h, interpolateColor(getPowerColor(), COLOR_PRIMARY, 0.5));
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 10, y + 10);
@@ -437,7 +440,7 @@ void drawCapacityDisplay() {
     String totalStr = String(bmsData.nominalCapacity, 2);
     String capacityStr = remainStr + " / " + totalStr + " Ah";
     
-    tft.setFreeFont(&Orbitron_Medium_Bold_20);
+    tft.setFreeFont(&FF22);
     tft.setTextColor(TFT_WHITE, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 10, y + 30);
@@ -457,6 +460,7 @@ void drawCapacityDisplay() {
         tft.fillRoundRect(barX, barY, fillWidth, barHeight, 4, getPowerColor());
     }
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT, cardColor);
     tft.setTextSize(1);
     tft.setCursor(barX + barWidth - 35, barY - 1);
@@ -473,6 +477,7 @@ void drawSOCDisplay() {
     drawRoundedRect(x, y, w, h, 12, cardColor);
     drawCardBorder(x, y, w, h, interpolateColor(COLOR_ACCENT, COLOR_PRIMARY, 0.3));
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 25, y + 10);
@@ -480,13 +485,13 @@ void drawSOCDisplay() {
     
     String socStr = String(bmsData.soc);
     
-    tft.setFreeFont(&Orbitron_Medium_Bold_32);
+    tft.setFreeFont(&FF24);
     tft.setTextColor(COLOR_ACCENT, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 25, y + 25);
     tft.println(socStr);
     
-    tft.setFreeFont(&Orbitron_Medium_16);
+    tft.setFreeFont(&FF21);
     tft.setTextColor(COLOR_TEXT, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 60, y + 35);
@@ -502,12 +507,13 @@ void drawBatteryStatus() {
     uint16_t cardColor = COLOR_CARD_BG;
     drawRoundedRect(x, y, w, h, 10, cardColor);
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 10, y + 8);
     tft.println("电池电压");
     
-    tft.setFreeFont(&Orbitron_Medium_Bold_24);
+    tft.setFreeFont(&FF23);
     tft.setTextColor(TFT_WHITE, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 10, y + 25);
@@ -523,12 +529,13 @@ void drawCurrentDisplay() {
     uint16_t cardColor = COLOR_CARD_BG;
     drawRoundedRect(x, y, w, h, 10, cardColor);
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 10, y + 8);
     tft.println("充放电流");
     
-    tft.setFreeFont(&Orbitron_Medium_Bold_24);
+    tft.setFreeFont(&FF23);
     uint16_t currentColor = bmsData.chargeCurrent < 0 ? TFT_GREEN : TFT_WHITE;
     tft.setTextColor(currentColor, cardColor);
     tft.setTextSize(1);
@@ -545,12 +552,13 @@ void drawTemperatureDisplay() {
     uint16_t cardColor = COLOR_CARD_BG;
     drawRoundedRect(x, y, w, h, 10, cardColor);
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 10, y + 6);
     tft.println("电芯温度");
     
-    tft.setFreeFont(&Orbitron_Medium_Bold_20);
+    tft.setFreeFont(&FF22);
     float avgTemp = (bmsData.batteryTemp1 + bmsData.batteryTemp2) / 2;
     uint16_t tempColor = avgTemp > 40 ? TFT_RED : (avgTemp > 30 ? COLOR_ACCENT : TFT_WHITE);
     tft.setTextColor(tempColor, cardColor);
@@ -568,12 +576,13 @@ void drawMOSTemperatureDisplay() {
     uint16_t cardColor = COLOR_CARD_BG;
     drawRoundedRect(x, y, w, h, 10, cardColor);
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
     tft.setCursor(x + 10, y + 6);
     tft.println("MOS温度");
     
-    tft.setFreeFont(&Orbitron_Medium_Bold_20);
+    tft.setFreeFont(&FF22);
     uint16_t mosColor = bmsData.mosTemp > 50 ? TFT_RED : (bmsData.mosTemp > 40 ? COLOR_ACCENT : TFT_WHITE);
     tft.setTextColor(mosColor, cardColor);
     tft.setTextSize(1);
@@ -592,6 +601,7 @@ void drawStatusIndicators() {
     
     int iconY = y + 8;
     
+    tft.setTextFont(1);
     if (bmsData.chargeMOS) {
         tft.fillRect(x + 10, iconY, 15, 10, TFT_GREEN);
         tft.setTextColor(COLOR_TEXT_DIM, cardColor);
@@ -621,6 +631,7 @@ void drawStatusIndicators() {
 void drawHeader() {
     tft.fillRect(0, 0, 320, 30, interpolateColor(COLOR_PRIMARY, TFT_BLACK, 0.7));
     
+    tft.setTextFont(1);
     tft.setTextColor(TFT_WHITE, interpolateColor(COLOR_PRIMARY, TFT_BLACK, 0.7));
     tft.setTextSize(2);
     tft.setCursor(60, 8);
@@ -669,6 +680,7 @@ void updateDisplay() {
 void drawConnectingScreen() {
     tft.fillScreen(TFT_BLACK);
     
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_PRIMARY, TFT_BLACK);
     tft.setTextSize(3);
     tft.setCursor(80, 80);
