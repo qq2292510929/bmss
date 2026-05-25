@@ -2,7 +2,6 @@
 #include <NimBLEDevice.h>
 #include <TFT_eSPI.h>
 
-// ==================== 配置区域 ====================
 #define BMS_MAC "98:da:20:07:b9:00"
 #define BMS_NAME "JK_BD4A24S10P"
 #define PROTOCOL_VERSION "JK02_32S"
@@ -18,7 +17,6 @@
 #define DEBUG_PRINTF(...)
 #endif
 
-// ==================== 颜色定义 - 机甲战斗风格 ====================
 #define COLOR_BG_DARK     0x0A0A
 #define COLOR_PRIMARY     0xF800
 #define COLOR_SECONDARY   0xFA20
@@ -31,7 +29,6 @@
 #define COLOR_TEXT        0xFFFF
 #define COLOR_TEXT_DIM    0x8410
 
-// ==================== 全局变量 ====================
 TFT_eSPI tft = TFT_eSPI();
 
 bool bleConnected = false;
@@ -41,7 +38,6 @@ int framePos = 0;
 bool frameStarted = false;
 bool newDataAvailable = false;
 
-// ==================== BMS数据结构 ====================
 struct BMSData {
     float cellVoltages[32];
     float batteryVoltage;
@@ -62,13 +58,11 @@ struct BMSData {
     float deltaCellVoltage;
 } bmsData;
 
-// ==================== 动画变量 ====================
 float currentPowerHue = 0;
 float targetPowerHue = 0;
 unsigned long lastAnimationTime = 0;
 int pulsePhase = 0;
 
-// ==================== JKBMS类 ====================
 class JKBMS {
 public:
     NimBLERemoteCharacteristic* pChr = nullptr;
@@ -76,39 +70,37 @@ public:
     bool doConnect = false;
     bool connected = false;
     std::string targetMAC;
-    
+
     JKBMS(const char* mac) : targetMAC(mac) {}
     JKBMS() = default;
-    
+
     bool connectToServer();
     void handleNotification(uint8_t* pData, size_t length);
     void writeRegister(uint8_t address, uint32_t value);
     uint8_t calculateCRC(const uint8_t data[], uint16_t len);
 };
 
-// ==================== 回调类 ====================
 class BMSCallbacks : public NimBLEClientCallbacks {
     void onConnect(NimBLEClient* pClient) {
-        DEBUG_PRINTLN("已连接到BMS");
+        DEBUG_PRINTLN("BLE connected");
         bleConnected = true;
     }
     void onDisconnect(NimBLEClient* pClient, int reason) {
-        DEBUG_PRINTF("BMS断开连接，原因: %d\n", reason);
+        DEBUG_PRINTF("BLE disconnected: %d\n", reason);
         bleConnected = false;
     }
 };
 
-// 提前声明jkBms供ScanCallbacks使用
 JKBMS jkBms(BMS_MAC);
 
 class ScanCallbacks : public NimBLEScanCallbacks {
     void onResult(const NimBLEAdvertisedDevice* advertisedDevice) {
         String devName = advertisedDevice->getName().c_str();
         String devAddr = advertisedDevice->getAddress().toString().c_str();
-        DEBUG_PRINTF("发现设备: %s [%s]\n", devName.c_str(), devAddr.c_str());
-        
+        DEBUG_PRINTF("Found: %s [%s]\n", devName.c_str(), devAddr.c_str());
+
         if (devAddr.equals(BMS_MAC) || devName.equals(BMS_NAME)) {
-            DEBUG_PRINTLN("找到目标BMS设备!");
+            DEBUG_PRINTLN("Target BMS found!");
             jkBms.advDevice = advertisedDevice;
             jkBms.doConnect = true;
             NimBLEDevice::getScan()->stop();
@@ -118,10 +110,7 @@ class ScanCallbacks : public NimBLEScanCallbacks {
 
 BMSCallbacks bmsCallbacks;
 ScanCallbacks scanCallbacks;
-
 NimBLEScan* pScan = nullptr;
-
-// ==================== 核心函数实现 ====================
 
 uint8_t JKBMS::calculateCRC(const uint8_t data[], uint16_t len) {
     uint8_t crc = 0;
@@ -132,8 +121,8 @@ uint8_t JKBMS::calculateCRC(const uint8_t data[], uint16_t len) {
 }
 
 bool JKBMS::connectToServer() {
-    DEBUG_PRINTLN("尝试连接到BMS...");
-    
+    DEBUG_PRINTLN("Connecting to BMS...");
+
     NimBLEClient* pClient = NimBLEDevice::getClientByPeerAddress(advDevice->getAddress());
     if (!pClient) {
         pClient = NimBLEDevice::createClient();
@@ -141,20 +130,20 @@ bool JKBMS::connectToServer() {
         pClient->setConnectionParams(12, 12, 0, 150);
         pClient->setConnectTimeout(10);
     }
-    
+
     if (!pClient->connect(advDevice)) {
-        DEBUG_PRINTLN("连接失败");
+        DEBUG_PRINTLN("Connection failed");
         return false;
     }
-    
-    DEBUG_PRINTF("已连接: %s RSSI: %d\n", pClient->getPeerAddress().toString().c_str(), pClient->getRssi());
-    
+
+    DEBUG_PRINTF("Connected: %s RSSI: %d\n", pClient->getPeerAddress().toString().c_str(), pClient->getRssi());
+
     NimBLERemoteService* pSvc = pClient->getService("ffe0");
     if (pSvc) {
         pChr = pSvc->getCharacteristic("ffe1");
         if (pChr && pChr->canNotify()) {
             if (pChr->subscribe(true, notifyCallback)) {
-                DEBUG_PRINTLN("通知订阅成功");
+                DEBUG_PRINTLN("Subscribed");
                 delay(500);
                 writeRegister(0x97, 0);
                 delay(300);
@@ -163,7 +152,7 @@ bool JKBMS::connectToServer() {
             }
         }
     }
-    DEBUG_PRINTLN("服务未找到");
+    DEBUG_PRINTLN("Service not found");
     return false;
 }
 
@@ -174,7 +163,7 @@ void JKBMS::writeRegister(uint8_t address, uint32_t value) {
     frame[8] = (value >> 16) & 0xFF;
     frame[9] = (value >> 24) & 0xFF;
     frame[19] = calculateCRC(frame, 19);
-    
+
     if (pChr) {
         pChr->writeValue(frame, 20);
     }
@@ -186,7 +175,7 @@ void notifyCallback(NimBLERemoteCharacteristic* pChr, uint8_t* pData, size_t len
 
 void JKBMS::handleNotification(uint8_t* pData, size_t length) {
     lastNotifyTime = millis();
-    
+
     if (pData[0] == 0x55 && pData[1] == 0xAA && pData[2] == 0xEB && pData[3] == 0x90) {
         framePos = 0;
         frameStarted = true;
@@ -195,7 +184,7 @@ void JKBMS::handleNotification(uint8_t* pData, size_t length) {
     } else if (frameStarted) {
         memcpy(frameBuffer + framePos, pData, length);
         framePos += length;
-        
+
         if (framePos >= 300) {
             frameStarted = false;
             newDataAvailable = true;
@@ -206,104 +195,82 @@ void JKBMS::handleNotification(uint8_t* pData, size_t length) {
 
 void parseFrame() {
     uint8_t frameType = frameBuffer[4];
-    
     switch (frameType) {
-        case 0x01:
-            parseSettingsFrame();
-            break;
-        case 0x02:
-            parseCellFrame();
-            break;
-        case 0x03:
-            parseDeviceInfoFrame();
-            break;
+        case 0x01: parseSettingsFrame(); break;
+        case 0x02: parseCellFrame(); break;
+        case 0x03: parseDeviceInfoFrame(); break;
     }
 }
 
 void parseCellFrame() {
-    DEBUG_PRINTLN("解析电芯数据帧");
-    
     for (int i = 0; i < 32; i++) {
         uint16_t voltage = frameBuffer[6 + i*2] | (frameBuffer[7 + i*2] << 8);
         bmsData.cellVoltages[i] = voltage * 0.001;
     }
-    
-    bmsData.batteryVoltage = (frameBuffer[150] | (frameBuffer[151] << 8) | 
+
+    bmsData.batteryVoltage = (frameBuffer[150] | (frameBuffer[151] << 8) |
                               (frameBuffer[152] << 16) | (frameBuffer[153] << 24)) * 0.001;
-    
-    int32_t powerRaw = frameBuffer[154] | (frameBuffer[155] << 8) | 
+
+    int32_t powerRaw = frameBuffer[154] | (frameBuffer[155] << 8) |
                        (frameBuffer[156] << 16) | (frameBuffer[157] << 24);
     bmsData.batteryPower = powerRaw * 0.001;
-    
-    int32_t currentRaw = frameBuffer[158] | (frameBuffer[159] << 8) | 
+
+    int32_t currentRaw = frameBuffer[158] | (frameBuffer[159] << 8) |
                          (frameBuffer[160] << 16) | (frameBuffer[161] << 24);
     bmsData.chargeCurrent = currentRaw * 0.001;
-    
+
     int16_t mosTempRaw = frameBuffer[144] | (frameBuffer[145] << 8);
     bmsData.mosTemp = mosTempRaw * 0.1;
-    
+
     int16_t temp1Raw = frameBuffer[162] | (frameBuffer[163] << 8);
     bmsData.batteryTemp1 = temp1Raw * 0.1;
-    
+
     int16_t temp2Raw = frameBuffer[164] | (frameBuffer[165] << 8);
     bmsData.batteryTemp2 = temp2Raw * 0.1;
-    
+
     bmsData.soc = frameBuffer[173];
-    
-    bmsData.remainingCapacity = (frameBuffer[174] | (frameBuffer[175] << 8) | 
+
+    bmsData.remainingCapacity = (frameBuffer[174] | (frameBuffer[175] << 8) |
                                 (frameBuffer[176] << 16) | (frameBuffer[177] << 24)) * 0.001;
-    
-    bmsData.nominalCapacity = (frameBuffer[178] | (frameBuffer[179] << 8) | 
+
+    bmsData.nominalCapacity = (frameBuffer[178] | (frameBuffer[179] << 8) |
                               (frameBuffer[180] << 16) | (frameBuffer[181] << 24)) * 0.001;
-    
+
     bmsData.chargeMOS = frameBuffer[198];
     bmsData.dischargeMOS = frameBuffer[199];
     bmsData.balancing = frameBuffer[201];
-    
+
     bmsData.avgCellVoltage = (frameBuffer[74] | (frameBuffer[75] << 8)) * 0.001;
     bmsData.deltaCellVoltage = (frameBuffer[76] | (frameBuffer[77] << 8)) * 0.001;
-    
+
     calculatePowerHue();
 }
 
 void parseSettingsFrame() {
-    DEBUG_PRINTLN("解析设置帧");
     bmsData.cellCount = frameBuffer[114];
 }
 
 void parseDeviceInfoFrame() {
-    DEBUG_PRINTLN("解析设备信息帧");
 }
 
 void calculatePowerHue() {
     float absPower = abs(bmsData.batteryPower);
-    
-    if (absPower < 100) {
-        targetPowerHue = 160;
-    } else if (absPower < 500) {
-        targetPowerHue = 80;
-    } else if (absPower < 1500) {
-        targetPowerHue = 40;
-    } else {
-        targetPowerHue = 0;
-    }
+    if (absPower < 100) targetPowerHue = 160;
+    else if (absPower < 500) targetPowerHue = 80;
+    else if (absPower < 1500) targetPowerHue = 40;
+    else targetPowerHue = 0;
 }
-
-// ==================== UI绘制函数 ====================
 
 uint16_t interpolateColor(uint16_t color1, uint16_t color2, float ratio) {
     uint8_t r1 = (color1 >> 11) & 0x1F;
     uint8_t g1 = (color1 >> 5) & 0x3F;
     uint8_t b1 = color1 & 0x1F;
-    
     uint8_t r2 = (color2 >> 11) & 0x1F;
     uint8_t g2 = (color2 >> 5) & 0x3F;
     uint8_t b2 = color2 & 0x1F;
-    
     uint8_t r = r1 + (r2 - r1) * ratio;
     uint8_t g = g1 + (g2 - g1) * ratio;
     uint8_t b = b1 + (b2 - b1) * ratio;
-    
     return (r << 11) | (g << 5) | b;
 }
 
@@ -311,31 +278,19 @@ uint16_t getPowerColor() {
     float absPower = abs(bmsData.batteryPower);
     float ratio;
     uint16_t color1, color2;
-    
+
     if (absPower < 100) {
-        color1 = COLOR_POWER_LOW;
-        color2 = COLOR_POWER_LOW;
-        ratio = 0;
+        color1 = COLOR_POWER_LOW; color2 = COLOR_POWER_LOW; ratio = 0;
     } else if (absPower < 500) {
-        color1 = COLOR_POWER_LOW;
-        color2 = COLOR_POWER_MED;
-        ratio = (absPower - 100) / 400.0;
+        color1 = COLOR_POWER_LOW; color2 = COLOR_POWER_MED; ratio = (absPower - 100) / 400.0;
     } else if (absPower < 1500) {
-        color1 = COLOR_POWER_MED;
-        color2 = COLOR_POWER_HIGH;
-        ratio = (absPower - 500) / 1000.0;
+        color1 = COLOR_POWER_MED; color2 = COLOR_POWER_HIGH; ratio = (absPower - 500) / 1000.0;
     } else {
-        color1 = COLOR_POWER_HIGH;
-        color2 = COLOR_POWER_MAX;
-        ratio = min((absPower - 1500) / 1500.0, 1.0);
+        color1 = COLOR_POWER_HIGH; color2 = COLOR_POWER_MAX; ratio = min((absPower - 1500) / 1500.0, 1.0);
     }
-    
+
     currentPowerHue += (targetPowerHue - currentPowerHue) * 0.1;
     return interpolateColor(color1, color2, ratio);
-}
-
-void drawRoundedRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, uint16_t color) {
-    tft.fillRoundRect(x, y, w, h, r, color);
 }
 
 void drawCardBorder(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
@@ -355,288 +310,319 @@ void drawCornerDecorations() {
 void drawBleStatus() {
     int16_t x = 290;
     int16_t y = 10;
-    
+
     if (bleConnected) {
         uint16_t blinkColor = (millis() / 500) % 2 == 0 ? TFT_GREEN : interpolateColor(TFT_GREEN, TFT_BLACK, 0.5);
         tft.fillCircle(x, y, 8, blinkColor);
         tft.fillCircle(x, y, 4, TFT_WHITE);
-        
+        tft.setTextFont(1);
         tft.setTextColor(TFT_GREEN, TFT_BLACK);
         tft.setTextSize(1);
         tft.setCursor(x - 25, y - 4);
-        tft.println("BLE");
+        tft.print("BLE");
     } else {
         tft.fillCircle(x, y, 8, TFT_RED);
         tft.fillCircle(x, y, 4, interpolateColor(TFT_RED, TFT_BLACK, 0.5));
-        
+        tft.setTextFont(1);
         tft.setTextColor(TFT_RED, TFT_BLACK);
         tft.setTextSize(1);
         tft.setCursor(x - 25, y - 4);
-        tft.println("BLE");
+        tft.print("BLE");
     }
 }
 
 void drawMainPowerDisplay() {
-    int16_t centerX = 160;
-    int16_t centerY = 85;
-    
+    int16_t cx = 160;
+    int16_t cy = 90;
     uint16_t powerColor = getPowerColor();
-    
-    drawRoundedRect(centerX - 100, centerY - 50, 200, 100, 15, interpolateColor(powerColor, TFT_BLACK, 0.8));
-    drawCardBorder(centerX - 100, centerY - 50, 200, 100, powerColor);
-    
+    uint16_t cardBg = interpolateColor(powerColor, TFT_BLACK, 0.8);
+
+    tft.fillRoundRect(cx - 110, cy - 55, 220, 110, 15, cardBg);
+    drawCardBorder(cx - 110, cy - 55, 220, 110, powerColor);
+
     tft.setTextFont(1);
-    tft.setTextColor(powerColor, interpolateColor(powerColor, TFT_BLACK, 0.8));
+    tft.setTextColor(powerColor, cardBg);
     tft.setTextSize(1);
-    tft.setCursor(centerX - 40, centerY - 40);
-    tft.println("实时放电功率");
-    
+    tft.setCursor(cx - 36, cy - 48);
+    tft.print("POWER");
+
     float displayPower = abs(bmsData.batteryPower);
-    String powerStr = String(displayPower, 1);
-    
-    tft.setFreeFont(&FF24);
-    tft.setTextColor(TFT_WHITE, interpolateColor(powerColor, TFT_BLACK, 0.8));
+    tft.setTextFont(7);
+    tft.setTextColor(TFT_WHITE, cardBg);
     tft.setTextSize(1);
-    tft.setCursor(centerX - 60, centerY + 5);
-    tft.println(powerStr);
-    
-    tft.setFreeFont(&FF23);
-    tft.setTextColor(TFT_WHITE, interpolateColor(powerColor, TFT_BLACK, 0.8));
-    tft.setTextSize(1);
-    tft.setCursor(centerX + 30, centerY + 15);
-    tft.println("W");
-    
+    tft.setCursor(cx - 70, cy - 20);
+    tft.print(displayPower, 0);
+
     tft.setTextFont(1);
+    tft.setTextColor(TFT_WHITE, cardBg);
+    tft.setTextSize(2);
+    tft.setCursor(cx + 60, cy + 10);
+    tft.print("W");
+
+    tft.setTextFont(1);
+    tft.setTextSize(1);
     if (bmsData.batteryPower < -10) {
-        tft.setTextColor(COLOR_ACCENT, interpolateColor(powerColor, TFT_BLACK, 0.8));
-        tft.setTextSize(1);
-        tft.setCursor(centerX - 30, centerY + 35);
-        tft.println("充电中");
+        tft.setTextColor(COLOR_ACCENT, cardBg);
+        tft.setCursor(cx - 24, cy + 38);
+        tft.print("CHG");
     } else if (bmsData.batteryPower > 10) {
-        tft.setTextColor(TFT_GREEN, interpolateColor(powerColor, TFT_BLACK, 0.8));
-        tft.setTextSize(1);
-        tft.setCursor(centerX - 30, centerY + 35);
-        tft.println("放电中");
+        tft.setTextColor(TFT_GREEN, cardBg);
+        tft.setCursor(cx - 24, cy + 38);
+        tft.print("DIS");
+    } else {
+        tft.setTextColor(COLOR_TEXT_DIM, cardBg);
+        tft.setCursor(cx - 20, cy + 38);
+        tft.print("IDLE");
+    }
+
+    int barW = 200;
+    int barH = 4;
+    int barX = cx - 100;
+    int barY = cy + 50;
+    tft.fillRoundRect(barX, barY, barW, barH, 2, interpolateColor(TFT_BLACK, COLOR_PRIMARY, 0.3));
+    int fillW = min((int)(barW * displayPower / 3000.0), barW);
+    if (fillW > 0) {
+        tft.fillRoundRect(barX, barY, fillW, barH, 2, powerColor);
     }
 }
 
 void drawCapacityDisplay() {
     int16_t x = 20;
-    int16_t y = 145;
-    int16_t w = 180;
-    int16_t h = 70;
-    
+    int16_t y = 155;
+    int16_t w = 190;
+    int16_t h = 65;
     uint16_t cardColor = COLOR_CARD_BG;
-    drawRoundedRect(x, y, w, h, 12, cardColor);
+
+    tft.fillRoundRect(x, y, w, h, 12, cardColor);
     drawCardBorder(x, y, w, h, interpolateColor(getPowerColor(), COLOR_PRIMARY, 0.5));
-    
+
     tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 10);
-    tft.println("已用 / 总容量");
-    
-    String remainStr = String(bmsData.remainingCapacity, 2);
-    String totalStr = String(bmsData.nominalCapacity, 2);
-    String capacityStr = remainStr + " / " + totalStr + " Ah";
-    
-    tft.setFreeFont(&FF22);
+    tft.setCursor(x + 8, y + 6);
+    tft.print("CAPACITY");
+
+    String remainStr = String(bmsData.remainingCapacity, 1);
+    String totalStr = String(bmsData.nominalCapacity, 1);
+    String capStr = remainStr + "/" + totalStr + "Ah";
+
+    tft.setTextFont(2);
     tft.setTextColor(TFT_WHITE, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 30);
-    tft.println(capacityStr);
-    
-    int barWidth = w - 40;
-    int barHeight = 12;
-    int barX = x + 20;
-    int barY = y + h - 22;
-    
+    tft.setCursor(x + 8, y + 20);
+    tft.print(capStr);
+
+    int barWidth = w - 20;
+    int barHeight = 10;
+    int barX = x + 10;
+    int barY = y + h - 18;
     tft.fillRoundRect(barX, barY, barWidth, barHeight, 4, interpolateColor(TFT_BLACK, COLOR_PRIMARY, 0.3));
-    
-    float usagePercent = bmsData.nominalCapacity > 0 ? 
+
+    float usagePercent = bmsData.nominalCapacity > 0 ?
                          (1 - bmsData.remainingCapacity / bmsData.nominalCapacity) * 100 : 0;
     int fillWidth = (barWidth * usagePercent) / 100;
     if (fillWidth > 0) {
         tft.fillRoundRect(barX, barY, fillWidth, barHeight, 4, getPowerColor());
     }
-    
+
     tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(barX + barWidth - 35, barY - 1);
-    tft.println(String(bmsData.soc) + "%");
+    tft.setCursor(barX + barWidth - 25, barY - 2);
+    tft.print(String(bmsData.soc) + "%");
 }
 
 void drawSOCDisplay() {
-    int16_t x = 210;
-    int16_t y = 145;
-    int16_t w = 100;
-    int16_t h = 70;
-    
+    int16_t x = 220;
+    int16_t y = 155;
+    int16_t w = 90;
+    int16_t h = 65;
     uint16_t cardColor = COLOR_CARD_BG;
-    drawRoundedRect(x, y, w, h, 12, cardColor);
+
+    tft.fillRoundRect(x, y, w, h, 12, cardColor);
     drawCardBorder(x, y, w, h, interpolateColor(COLOR_ACCENT, COLOR_PRIMARY, 0.3));
-    
+
     tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 25, y + 10);
-    tft.println("电量");
-    
-    String socStr = String(bmsData.soc);
-    
-    tft.setFreeFont(&FF24);
+    tft.setCursor(x + 28, y + 6);
+    tft.print("SOC");
+
+    tft.setTextFont(7);
     tft.setTextColor(COLOR_ACCENT, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 25, y + 25);
-    tft.println(socStr);
-    
-    tft.setFreeFont(&FF21);
+    tft.setCursor(x + 15, y + 22);
+    tft.print(bmsData.soc);
+
+    tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT, cardColor);
-    tft.setTextSize(1);
-    tft.setCursor(x + 60, y + 35);
-    tft.println("%");
+    tft.setTextSize(2);
+    tft.setCursor(x + 65, y + 32);
+    tft.print("%");
 }
 
 void drawBatteryStatus() {
     int16_t x = 20;
-    int16_t y = 225;
-    int16_t w = 140;
+    int16_t y = 230;
+    int16_t w = 145;
     int16_t h = 50;
-    
     uint16_t cardColor = COLOR_CARD_BG;
-    drawRoundedRect(x, y, w, h, 10, cardColor);
-    
+
+    tft.fillRoundRect(x, y, w, h, 10, cardColor);
+
     tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 8);
-    tft.println("电池电压");
-    
-    tft.setFreeFont(&FF23);
+    tft.setCursor(x + 8, y + 5);
+    tft.print("VOLTAGE");
+
+    tft.setTextFont(4);
     tft.setTextColor(TFT_WHITE, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 25);
-    tft.println(String(bmsData.batteryVoltage, 2) + "V");
+    tft.setCursor(x + 8, y + 18);
+    tft.print(String(bmsData.batteryVoltage, 1));
+    tft.setTextFont(1);
+    tft.setTextSize(2);
+    tft.print("V");
 }
 
 void drawCurrentDisplay() {
-    int16_t x = 170;
-    int16_t y = 225;
-    int16_t w = 140;
+    int16_t x = 175;
+    int16_t y = 230;
+    int16_t w = 145;
     int16_t h = 50;
-    
     uint16_t cardColor = COLOR_CARD_BG;
-    drawRoundedRect(x, y, w, h, 10, cardColor);
-    
+
+    tft.fillRoundRect(x, y, w, h, 10, cardColor);
+
     tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 8);
-    tft.println("充放电流");
-    
-    tft.setFreeFont(&FF23);
+    tft.setCursor(x + 8, y + 5);
+    tft.print("CURRENT");
+
+    tft.setTextFont(4);
     uint16_t currentColor = bmsData.chargeCurrent < 0 ? TFT_GREEN : TFT_WHITE;
     tft.setTextColor(currentColor, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 25);
-    tft.println(String(abs(bmsData.chargeCurrent), 2) + "A");
+    tft.setCursor(x + 8, y + 18);
+    tft.print(String(abs(bmsData.chargeCurrent), 1));
+    tft.setTextFont(1);
+    tft.setTextSize(2);
+    tft.print("A");
 }
 
 void drawTemperatureDisplay() {
     int16_t x = 20;
-    int16_t y = 285;
-    int16_t w = 95;
+    int16_t y = 290;
+    int16_t w = 100;
     int16_t h = 45;
-    
     uint16_t cardColor = COLOR_CARD_BG;
-    drawRoundedRect(x, y, w, h, 10, cardColor);
-    
+
+    tft.fillRoundRect(x, y, w, h, 10, cardColor);
+
     tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 6);
-    tft.println("电芯温度");
-    
-    tft.setFreeFont(&FF22);
+    tft.setCursor(x + 8, y + 4);
+    tft.print("CELL TEMP");
+
     float avgTemp = (bmsData.batteryTemp1 + bmsData.batteryTemp2) / 2;
+    tft.setTextFont(4);
     uint16_t tempColor = avgTemp > 40 ? TFT_RED : (avgTemp > 30 ? COLOR_ACCENT : TFT_WHITE);
     tft.setTextColor(tempColor, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 22);
-    tft.println(String(avgTemp, 1) + "C");
+    tft.setCursor(x + 8, y + 17);
+    tft.print(String(avgTemp, 0));
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    tft.print("C");
 }
 
 void drawMOSTemperatureDisplay() {
-    int16_t x = 125;
-    int16_t y = 285;
-    int16_t w = 95;
+    int16_t x = 130;
+    int16_t y = 290;
+    int16_t w = 100;
     int16_t h = 45;
-    
     uint16_t cardColor = COLOR_CARD_BG;
-    drawRoundedRect(x, y, w, h, 10, cardColor);
-    
+
+    tft.fillRoundRect(x, y, w, h, 10, cardColor);
+
     tft.setTextFont(1);
     tft.setTextColor(COLOR_TEXT_DIM, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 6);
-    tft.println("MOS温度");
-    
-    tft.setFreeFont(&FF22);
+    tft.setCursor(x + 8, y + 4);
+    tft.print("MOS TEMP");
+
+    tft.setTextFont(4);
     uint16_t mosColor = bmsData.mosTemp > 50 ? TFT_RED : (bmsData.mosTemp > 40 ? COLOR_ACCENT : TFT_WHITE);
     tft.setTextColor(mosColor, cardColor);
     tft.setTextSize(1);
-    tft.setCursor(x + 10, y + 22);
-    tft.println(String(bmsData.mosTemp, 1) + "C");
+    tft.setCursor(x + 8, y + 17);
+    tft.print(String(bmsData.mosTemp, 0));
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    tft.print("C");
 }
 
 void drawStatusIndicators() {
-    int16_t x = 230;
-    int16_t y = 285;
+    int16_t x = 240;
+    int16_t y = 290;
     int16_t w = 80;
     int16_t h = 45;
-    
     uint16_t cardColor = COLOR_CARD_BG;
-    drawRoundedRect(x, y, w, h, 10, cardColor);
-    
-    int iconY = y + 8;
-    
+
+    tft.fillRoundRect(x, y, w, h, 10, cardColor);
+
     tft.setTextFont(1);
+    tft.setTextSize(1);
+    int iy = y + 6;
+
     if (bmsData.chargeMOS) {
-        tft.fillRect(x + 10, iconY, 15, 10, TFT_GREEN);
+        tft.fillRect(x + 8, iy, 12, 8, TFT_GREEN);
+        tft.setTextColor(TFT_WHITE, cardColor);
+        tft.setCursor(x + 24, iy);
+        tft.print("CHG");
+    } else {
+        tft.fillRect(x + 8, iy, 12, 8, interpolateColor(TFT_GREEN, TFT_BLACK, 0.5));
         tft.setTextColor(COLOR_TEXT_DIM, cardColor);
-        tft.setTextSize(1);
-        tft.setCursor(x + 30, iconY);
-        tft.println("充");
+        tft.setCursor(x + 24, iy);
+        tft.print("CHG");
     }
-    
+
     if (bmsData.dischargeMOS) {
-        tft.fillRect(x + 10, iconY + 15, 15, 10, COLOR_ACCENT);
+        tft.fillRect(x + 8, iy + 12, 12, 8, COLOR_ACCENT);
+        tft.setTextColor(TFT_WHITE, cardColor);
+        tft.setCursor(x + 24, iy + 12);
+        tft.print("DIS");
+    } else {
+        tft.fillRect(x + 8, iy + 12, 12, 8, interpolateColor(COLOR_ACCENT, TFT_BLACK, 0.5));
         tft.setTextColor(COLOR_TEXT_DIM, cardColor);
-        tft.setTextSize(1);
-        tft.setCursor(x + 30, iconY + 15);
-        tft.println("放");
+        tft.setCursor(x + 24, iy + 12);
+        tft.print("DIS");
     }
-    
+
+    int blink = (millis() / 300) % 2;
     if (bmsData.balancing) {
-        int blink = (millis() / 300) % 2;
-        tft.fillRect(x + 10, iconY + 30, 15, 8, blink ? TFT_BLUE : interpolateColor(TFT_BLUE, TFT_BLACK, 0.5));
+        tft.fillRect(x + 8, iy + 24, 12, 8, blink ? TFT_BLUE : interpolateColor(TFT_BLUE, TFT_BLACK, 0.5));
+        tft.setTextColor(TFT_WHITE, cardColor);
+        tft.setCursor(x + 24, iy + 24);
+        tft.print("BAL");
+    } else {
+        tft.fillRect(x + 8, iy + 24, 12, 8, interpolateColor(TFT_BLUE, TFT_BLACK, 0.5));
         tft.setTextColor(COLOR_TEXT_DIM, cardColor);
-        tft.setTextSize(1);
-        tft.setCursor(x + 30, iconY + 30);
-        tft.println("均");
+        tft.setCursor(x + 24, iy + 24);
+        tft.print("BAL");
     }
 }
 
 void drawHeader() {
     tft.fillRect(0, 0, 320, 30, interpolateColor(COLOR_PRIMARY, TFT_BLACK, 0.7));
-    
-    tft.setTextFont(1);
+    tft.setTextFont(2);
     tft.setTextColor(TFT_WHITE, interpolateColor(COLOR_PRIMARY, TFT_BLACK, 0.7));
-    tft.setTextSize(2);
-    tft.setCursor(60, 8);
-    tft.println("机甲战士 BMS");
-    
+    tft.setTextSize(1);
+    tft.setCursor(10, 8);
+    tft.print("MECHA BMS");
     drawBleStatus();
 }
 
@@ -646,11 +632,10 @@ void drawAnimatedEffects() {
         lastAnimationTime = currentTime;
         pulsePhase = (pulsePhase + 1) % 360;
     }
-    
+
     if (bleConnected) {
         int glowIntensity = (sin(pulsePhase * 0.05) + 1) * 0.3;
         uint16_t glowColor = interpolateColor(getPowerColor(), TFT_WHITE, glowIntensity);
-        
         for (int i = 0; i < 3; i++) {
             int y = 35 + i * 65;
             if (y < 200) {
@@ -662,8 +647,9 @@ void drawAnimatedEffects() {
 }
 
 void updateDisplay() {
+    tft.fillScreen(COLOR_BG_DARK);
     tft.setTextDatum(TL_DATUM);
-    
+
     drawAnimatedEffects();
     drawCornerDecorations();
     drawHeader();
@@ -679,75 +665,70 @@ void updateDisplay() {
 
 void drawConnectingScreen() {
     tft.fillScreen(TFT_BLACK);
-    
-    tft.setTextFont(1);
+
+    tft.setTextFont(2);
     tft.setTextColor(COLOR_PRIMARY, TFT_BLACK);
-    tft.setTextSize(3);
-    tft.setCursor(80, 80);
-    tft.println("机甲战士");
-    
+    tft.setTextSize(2);
+    tft.setCursor(70, 70);
+    tft.print("MECHA BMS");
+
+    tft.setTextFont(1);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(2);
-    tft.setCursor(100, 120);
-    tft.println("BMS 监控");
-    
+    tft.setCursor(90, 110);
+    tft.print("MONITOR");
+
     tft.setTextColor(COLOR_TEXT_DIM, TFT_BLACK);
     tft.setTextSize(1);
-    tft.setCursor(90, 160);
-    tft.println("正在连接蓝牙...");
-    tft.setCursor(85, 175);
-    tft.println("MAC: " + String(BMS_MAC));
-    
+    tft.setCursor(85, 150);
+    tft.print("Connecting BLE...");
+    tft.setCursor(80, 165);
+    tft.print("MAC: " + String(BMS_MAC));
+
     int loadingX = 160;
     int loadingY = 200;
-    int loadingR = 30;
-    
+    int loadingR = 25;
     int angle = (millis() / 20) % 360;
     for (int i = 0; i < 12; i++) {
-        int segmentAngle = (angle + i * 30) * PI / 180;
-        int dotX = loadingX + cos(segmentAngle) * loadingR;
-        int dotY = loadingY + sin(segmentAngle) * loadingR;
+        int segAngle = (angle + i * 30) * PI / 180;
+        int dotX = loadingX + cos(segAngle) * loadingR;
+        int dotY = loadingY + sin(segAngle) * loadingR;
         int brightness = map(i, 0, 12, 50, 255);
         tft.fillCircle(dotX, dotY, 3, interpolateColor(COLOR_PRIMARY, TFT_BLACK, 1 - brightness / 255.0));
     }
-    
+
     tft.setTextColor(COLOR_TEXT_DIM, TFT_BLACK);
     tft.setTextSize(1);
-    tft.setCursor(70, 240);
-    tft.println("ST7789 2.8'' 横屏显示");
-    tft.setCursor(90, 260);
-    tft.println("JK02_32S 协议解析");
+    tft.setCursor(80, 230);
+    tft.print("ST7789 320x240");
+    tft.setCursor(85, 245);
+    tft.print("JK02_32S Protocol");
 }
-
-// ==================== 主程序 ====================
 
 void setup() {
     #if DEBUG_ENABLED
     Serial.begin(115200);
     #endif
-    
-    DEBUG_PRINTLN("初始化TFT屏幕...");
+
     tft.init();
     tft.setRotation(1);
     tft.fillScreen(TFT_BLACK);
     tft.setSwapBytes(true);
-    
+
     #if defined(TFT_BL)
     pinMode(TFT_BL, OUTPUT);
     digitalWrite(TFT_BL, HIGH);
     #endif
-    
-    DEBUG_PRINTLN("初始化BLE...");
+
     NimBLEDevice::init("");
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-    
+
     drawConnectingScreen();
 }
 
 void loop() {
     if (!bleConnected) {
         if (!jkBms.doConnect) {
-            DEBUG_PRINTLN("开始扫描BMS...");
             pScan = NimBLEDevice::getScan();
             pScan->setScanCallbacks(&scanCallbacks);
             pScan->setActiveScan(true);
@@ -755,13 +736,13 @@ void loop() {
             pScan->setWindow(50);
             pScan->start(5, false);
         }
-        
+
         if (jkBms.doConnect) {
             jkBms.doConnect = false;
             if (jkBms.connectToServer()) {
-                DEBUG_PRINTLN("连接成功!");
+                DEBUG_PRINTLN("Connected!");
             } else {
-                DEBUG_PRINTLN("连接失败，5秒后重试...");
+                DEBUG_PRINTLN("Failed, retry in 5s...");
                 delay(5000);
             }
         }
@@ -770,13 +751,12 @@ void loop() {
             newDataAvailable = false;
             updateDisplay();
         }
-        
+
         if (millis() - lastNotifyTime > 10000) {
-            DEBUG_PRINTLN("BMS连接超时");
             bleConnected = false;
             NimBLEDevice::getClientByPeerAddress(jkBms.advDevice->getAddress())->disconnect();
         }
     }
-    
+
     delay(10);
 }
