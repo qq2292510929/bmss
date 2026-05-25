@@ -77,7 +77,7 @@ public:
     bool connected = false;
     std::string targetMAC;
     
-    JKBMS(const std::string& mac) : targetMAC(mac) {}
+    JKBMS(const char* mac) : targetMAC(mac) {}
     JKBMS() = default;
     
     bool connectToServer();
