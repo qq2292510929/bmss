@@ -77,6 +77,9 @@ public:
     bool connected = false;
     std::string targetMAC;
     
+    JKBMS(const std::string& mac) : targetMAC(mac) {}
+    JKBMS() = default;
+    
     bool connectToServer();
     void handleNotification(uint8_t* pData, size_t length);
     void writeRegister(uint8_t address, uint32_t value);
