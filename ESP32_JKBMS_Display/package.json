@@ -1,0 +1,17 @@
+{
+  "name": "ESP32-JKBMS-Display",
+  "version": "1.0.0",
+  "description": "ESP32 JK BMS Display with Battle Mode UI",
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "tft-espi": "^2.5.0",
+    "nimble-arduino": "^1.4.1"
+  },
+  "hardware": {
+    "board": "esp32dev",
+    "display": "ST7789 2.8 inch",
+    "bms": "JK_BD4A24S10P",
+    "protocol": "JK02_32S"
+  }
+}

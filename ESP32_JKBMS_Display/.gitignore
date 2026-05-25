@@ -1,0 +1,50 @@
+# PlatformIO
+.pio
+.vscode
+.pioenvs
+.piolibdeps
+.clang_complete
+.gcc-flags.json
+build/
+lib/*.a
+lib_deps/
+obj/
+*.tmp
+*.o
+*.pyc
+__pycache__/
+
+# Arduino
+*.ino.bin
+*.ino.eep
+*.bak
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+
+# Eclipse
+.cproject
+.project
+.settings/
+
+# STM32CubeIDE
+Debug/
+Release/
+*.launch
+
+# Misc
+*.log
+*.tmp
+*.bak
+*.orig
+Thumbs.db
+
+# Compilation database
+compile_commands.json
+
+# Temporary files
+*.temp
+*.cache
+*.pid

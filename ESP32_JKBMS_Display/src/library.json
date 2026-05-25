@@ -1,0 +1,27 @@
+library.json
+{
+  "name": "ESP32-JKBMS-Display",
+  "version": "1.0.0",
+  "description": "A beautiful battle-style UI for JK BMS monitoring on ESP32 with ST7789 display",
+  "keywords": [
+    "esp32",
+    "jk-bms",
+    "battery-management",
+    "bluetooth",
+    "st7789",
+    "display",
+    "ui"
+  ],
+  "authors": [
+    {
+      "name": "Your Name",
+      "email": "your.email@example.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/ESP32-JKBMS-Display.git"
+  },
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}
