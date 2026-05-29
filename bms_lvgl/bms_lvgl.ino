@@ -390,7 +390,7 @@ void create_main_ui() {
   lv_obj_t *lbl_name = lv_label_create(title_box);
   lv_label_set_text(lbl_name, BMS_NAME);
   lv_obj_set_style_text_color(lbl_name, C_GRAY, 0);
-  lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_name, &lv_font_montserrat_12, 0);
   lv_obj_align(lbl_name, LV_ALIGN_RIGHT_MID, -8, 0);
 
   // BLE状态
@@ -435,7 +435,7 @@ void create_main_ui() {
   lv_obj_t *lbl_p_title = lv_label_create(panel_power);
   lv_label_set_text(lbl_p_title, "POWER");
   lv_obj_set_style_text_color(lbl_p_title, C_GRAY, 0);
-  lv_obj_set_style_text_font(lbl_p_title, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_p_title, &lv_font_montserrat_12, 0);
   lv_obj_align(lbl_p_title, LV_ALIGN_TOP_LEFT, 12, 10);
 
   // 功率大数字
@@ -500,7 +500,7 @@ void create_main_ui() {
   lv_obj_t *lbl_t_name = lv_label_create(card_temp);
   lv_label_set_text(lbl_t_name, "TEMP");
   lv_obj_set_style_text_color(lbl_t_name, C_GRAY, 0);
-  lv_obj_set_style_text_font(lbl_t_name, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_t_name, &lv_font_montserrat_12, 0);
   lv_obj_align(lbl_t_name, LV_ALIGN_TOP_LEFT, 8, 8);
 
   lbl_temp = lv_label_create(card_temp);
@@ -512,7 +512,7 @@ void create_main_ui() {
   lv_obj_t *lbl_t_unit = lv_label_create(card_temp);
   lv_label_set_text(lbl_t_unit, "C");
   lv_obj_set_style_text_color(lbl_t_unit, C_CYAN, 0);
-  lv_obj_set_style_text_font(lbl_t_unit, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_t_unit, &lv_font_montserrat_12, 0);
   lv_obj_align_to(lbl_t_unit, lbl_temp, LV_ALIGN_OUT_RIGHT_BOTTOM, 2, 2);
 
   // 电压卡片 - 黄色
@@ -520,7 +520,7 @@ void create_main_ui() {
   lv_obj_t *lbl_v_name = lv_label_create(card_volt);
   lv_label_set_text(lbl_v_name, "VOLT");
   lv_obj_set_style_text_color(lbl_v_name, C_GRAY, 0);
-  lv_obj_set_style_text_font(lbl_v_name, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_v_name, &lv_font_montserrat_12, 0);
   lv_obj_align(lbl_v_name, LV_ALIGN_TOP_LEFT, 8, 8);
 
   lbl_volt = lv_label_create(card_volt);
@@ -532,7 +532,7 @@ void create_main_ui() {
   lv_obj_t *lbl_v_unit = lv_label_create(card_volt);
   lv_label_set_text(lbl_v_unit, "V");
   lv_obj_set_style_text_color(lbl_v_unit, C_YELLOW, 0);
-  lv_obj_set_style_text_font(lbl_v_unit, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_v_unit, &lv_font_montserrat_12, 0);
   lv_obj_align_to(lbl_v_unit, lbl_volt, LV_ALIGN_OUT_RIGHT_BOTTOM, 2, 2);
 
   // 电流卡片 - 红色
@@ -540,7 +540,7 @@ void create_main_ui() {
   lv_obj_t *lbl_c_name = lv_label_create(card_curr);
   lv_label_set_text(lbl_c_name, "CURR");
   lv_obj_set_style_text_color(lbl_c_name, C_GRAY, 0);
-  lv_obj_set_style_text_font(lbl_c_name, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_c_name, &lv_font_montserrat_12, 0);
   lv_obj_align(lbl_c_name, LV_ALIGN_TOP_LEFT, 8, 8);
 
   lbl_curr = lv_label_create(card_curr);
@@ -552,7 +552,7 @@ void create_main_ui() {
   lv_obj_t *lbl_c_unit = lv_label_create(card_curr);
   lv_label_set_text(lbl_c_unit, "A");
   lv_obj_set_style_text_color(lbl_c_unit, C_RACING_RED, 0);
-  lv_obj_set_style_text_font(lbl_c_unit, &lv_font_montserrat_10, 0);
+  lv_obj_set_style_text_font(lbl_c_unit, &lv_font_montserrat_12, 0);
   lv_obj_align_to(lbl_c_unit, lbl_curr, LV_ALIGN_OUT_RIGHT_BOTTOM, 2, 2);
 
   // ---- 底部装饰条 ----
