@@ -66,6 +66,7 @@ BLERemoteCharacteristic* pWriteChar = nullptr;
 BLERemoteCharacteristic* pNotifyChar = nullptr;
 bool bleConnected = false;
 bool doConnect = false;
+bool doScan = false;
 BLEAdvertisedDevice* advDevice = nullptr;
 uint8_t frameBuf[MAX_FRAME_SIZE];
 int framePos = 0;
